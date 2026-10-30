@@ -2,7 +2,7 @@
 
 A study companion for an Arduino / Tinkercad robotics course, built for one real learner, a friend taking a free vocational course. It turns his own class notes into a concept map and practical Tinkercad challenges.
 
-> Live demo: _coming soon (GitHub Pages)_
+> **Live demo:** <https://tyrunt-a.github.io/Notes/>
 
 ## The problem
 
@@ -36,4 +36,4 @@ Planned after his feedback: AI review of pasted code, circuit screenshots, space
 
 ## Run it
 
-Open `index.html` in Chrome or Edge, go to **Ajustes**, and paste a Gemini API key from <https://aistudio.google.com/apikey>.
+Open the live demo (or `index.html` locally) in Chrome or Edge, go to **Ajustes**, and paste a Gemini API key from <https://aistudio.google.com/apikey>.
