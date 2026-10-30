@@ -126,6 +126,18 @@ ol.steps, ul.plain { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
 .diag.aplicacion .kind { color: var(--led-amber); }
 .pass { color: var(--led-green); font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; }
 
+.starters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.starters .small { margin-right: 2px; }
+button.chip-btn { font-size: .82rem; padding: 3px 10px; border-radius: 99px; background: var(--bg); color: var(--muted); border: 1px dashed var(--line); }
+button.chip-btn:hover { color: var(--ink); border-color: var(--muted); }
+.note-actions { display: flex; gap: 2px; }
+.idea { border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; border: 1px solid var(--line); background: var(--bg); }
+.idea.posible { border-left: 3px solid var(--led-green); }
+.idea.imposible { border-left: 3px solid var(--led-amber); }
+.idea.peligroso { border-left: 3px solid var(--led-red); }
+.merge-box { display: grid; gap: 8px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.concept .tools { display: flex; justify-content: flex-end; }
+.concept .tools button { font-size: .78rem; padding: 2px 6px; }
 .err-item { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px; }
 .err-item:first-child { border-top: 0; padding-top: 0; }
 .err-item .q { font-style: italic; }
@@ -166,6 +178,7 @@ code { font-family: var(--f-mono); font-size: .88em; background: var(--bg); padd
         <label style="flex:1 1 140px">Fecha<input type="date" id="noteDate"></label>
         <label style="flex:3 1 240px">Tema (opcional)<input type="text" id="noteTitle" placeholder="Ej.: semáforo con potenciómetro"></label>
       </div>
+      <div class="starters" id="starters"></div>
       <label>Lo que aprendí hoy<textarea id="noteText" placeholder="Ej.: analogRead lee el potenciómetro de 0 a 1023. Con map() lo paso a otro rango. El botão va con INPUT_PULLUP y entonces apretado da LOW..."></textarea></label>
       <div class="row"><button class="primary" id="saveNote">Guardar y organizar</button><span class="status-line" id="noteStatus"></span></div>
     </div>
@@ -220,7 +233,9 @@ code { font-family: var(--f-mono); font-size: .88em; background: var(--bg); padd
     </div>
     <div class="card">
       <h3>Respaldo</h3>
-      <p class="small">Tus notas y tu progreso viven solo en este navegador. Usa siempre el mismo navegador, nunca el modo incógnito, y descarga un respaldo una vez por semana.</p>
+      <p class="small">Tus notas y tu progreso viven solo en este navegador. Usa siempre el mismo navegador y nunca el modo incógnito.</p>
+      <div id="autoBox"></div>
+      <div class="eyebrow" style="margin-top:6px">Respaldo manual</div>
       <p class="small" id="lastBackup"></p>
       <div class="row">
         <button class="primary" data-act="export">Descargar respaldo</button>
@@ -232,6 +247,7 @@ code { font-family: var(--f-mono); font-size: .88em; background: var(--bg); padd
       </div>
       <span class="status-line" id="backupStatus"></span>
     </div>
+    <p class="small">Privacidad: para mejorar el servicio, la app envía datos técnicos de uso (qué función se usó, cuánto tardó y si hubo errores). Nunca se envían tus notas, tu código ni tu clave.</p>
   </section>
 </main>
 
@@ -280,7 +296,37 @@ Reglas que nunca rompes:
 5. Escribes en español claro, frases cortas, sin asumir conocimientos previos.
 6. Respondes SOLO con JSON válido con la forma exacta que se te pide, sin texto alrededor.`;
 
-class AIError extends Error {}
+class AIError extends Error { constructor(msg, kind = "otro") { super(msg); this.kind = kind; } }
+
+/* ============ Registro de uso (datos técnicos, nunca contenido) ============ */
+const APP_VERSION = "0.3";
+const TELEMETRY_URL = "";  // URL de la Web App de Google Apps Script (la pones tú al desplegarla)
+const TELEMETRY_KEY = "";  // la misma clave que pusiste en CLAVE dentro del Apps Script
+let aiTag = "otro";
+function setAI(el, tag) { aiStatusEl = el; aiTag = tag; }
+function anonId() {
+  try {
+    let id = localStorage.getItem("tinkernotes.uid");
+    if (!id) { id = Math.random().toString(36).slice(2, 10); localStorage.setItem("tinkernotes.uid", id); }
+    return id;
+  } catch (e) { return "sin-id"; }
+}
+function sendTelemetry(tel, error, t0) {
+  if (!TELEMETRY_URL) return;
+  try {
+    const body = JSON.stringify({
+      k: TELEMETRY_KEY, v: APP_VERSION, u: anonId(), t: new Date().toISOString(), f: aiTag,
+      m: tel.model, fb: tel.fallback, i: tel.input, o: tel.output, th: tel.thoughts,
+      r: tel.retries, e: error, s: Math.round((performance.now() - t0) / 100) / 10
+    });
+    fetch(TELEMETRY_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, keepalive: true }).catch(() => {});
+  } catch (e) {}
+}
+function sendEvent(name) {
+  const prev = aiTag; aiTag = name;
+  sendTelemetry({ model: "", fallback: false, input: 0, output: 0, thoughts: 0, retries: 0 }, "", performance.now());
+  aiTag = prev;
+}
 async function listModels() {
   const key = getKey();
   let res;
@@ -305,14 +351,28 @@ async function pickModel() {
   if (!best) throw new AIError("Tu clave no tiene ningún modelo Flash disponible. Elige uno a mano en Ajustes.");
   return best[0];
 }
-async function gemini(prompt, _retried) {
-  const key = getKey();
-  if (!key) throw new AIError("Falta tu clave de Gemini. Ve a Ajustes y pégala.");
+let aiStatusEl = null; // línea de estado donde se avisan los reintentos
+function aiNotify(msg) { if (aiStatusEl) { aiStatusEl.className = "status-line"; aiStatusEl.textContent = msg; } }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function scoreFallback(id) {
+  if (!/flash/.test(id) || /image|tts|live|audio|embed|native|robotics|computer|exp/.test(id)) return -1;
+  const v = parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
+  return (/preview/.test(id) ? 0 : 1000) + v * 10 - (/lite/.test(id) ? 5 : 0);
+}
+async function modelChain() {
   if (!S.model) { S.model = await pickModel(); save(); }
-  const model = S.model;
-  let res;
+  if (!S.fallbacks || !S.fallbacks.length) {
+    try {
+      const ids = await listModels();
+      S.fallbacks = ids.filter(id => scoreFallback(id) >= 0).sort((a, b) => scoreFallback(b) - scoreFallback(a)).slice(0, 4);
+      save();
+    } catch (e) { S.fallbacks = []; }
+  }
+  return [S.model, ...S.fallbacks.filter(m => m !== S.model)].slice(0, 3);
+}
+async function callModel(model, key, prompt) {
   try {
-    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    return await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
@@ -321,26 +381,62 @@ async function gemini(prompt, _retried) {
         generationConfig: { responseMimeType: "application/json", temperature: 0.5 }
       })
     });
-  } catch (e) { throw new AIError("No hay conexión con Gemini. Revisa tu internet y vuelve a intentarlo."); }
-  if (!res.ok) {
-    let msg = ""; try { msg = (await res.json()).error?.message || ""; } catch (e) {}
-    if (res.status === 400 && /API key/i.test(msg)) throw new AIError("La clave no es válida. Cópiala de nuevo desde AI Studio en Ajustes.");
-    if (res.status === 403) throw new AIError("La clave no tiene permiso. Crea una nueva en AI Studio y pégala en Ajustes.");
-    if (res.status === 404 && !_retried) { S.model = ""; save(); return gemini(prompt, true); }
-    if (res.status === 404) throw new AIError(`Google ya no ofrece el modelo "${model}" y no encontré otro disponible. Revisa en Ajustes.`);
-    if (res.status === 429) throw new AIError("Llegaste al límite gratuito por ahora. Espera un minuto (o hasta mañana si es el límite diario) y vuelve a intentarlo.");
-    if (res.status >= 500) throw new AIError("Gemini está saturado en este momento. Vuelve a intentarlo en un minuto.");
-    throw new AIError(`Gemini respondió con un error (${res.status}). ${msg}`);
+  } catch (e) { return null; }
+}
+async function gemini(prompt) {
+  const t0 = performance.now();
+  const tel = { model: "", fallback: false, input: 0, output: 0, thoughts: 0, retries: 0 };
+  try { const r = await geminiCore(prompt, false, tel); sendTelemetry(tel, "", t0); return r; }
+  catch (e) { sendTelemetry(tel, e.kind || "otro", t0); throw e; }
+}
+async function geminiCore(prompt, _retried, tel) {
+  const key = getKey();
+  if (!key) throw new AIError("Falta tu clave de Gemini. Ve a Ajustes y pégala.", "sin_clave");
+  const chain = await modelChain();
+  let lastStatus = 0, offline = false;
+  // Cada modelo tiene su propio cupo gratuito: si uno está saturado o al límite, probamos el siguiente.
+  for (let mi = 0; mi < chain.length; mi++) {
+    const model = chain[mi];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const res = await callModel(model, key, prompt);
+      if (!res) { offline = true; break; }
+      if (res.ok) {
+        const data = await res.json();
+        const um = data.usageMetadata || {};
+        tel.model = model; tel.fallback = mi > 0;
+        tel.input += um.promptTokenCount || 0; tel.output += um.candidatesTokenCount || 0; tel.thoughts += um.thoughtsTokenCount || 0;
+        const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
+        if (!text) { lastStatus = 500; break; }
+        try { return JSON.parse(text); }
+        catch (e) {
+          const m = text.match(/\{[\s\S]*\}/);
+          if (m) { try { return JSON.parse(m[0]); } catch (e2) {} }
+          lastStatus = 500; break;
+        }
+      }
+      lastStatus = res.status; tel.retries++; tel.model = model;
+      let msg = ""; try { msg = (await res.json()).error?.message || ""; } catch (e) {}
+      if (res.status === 400 && /API key/i.test(msg)) throw new AIError("La clave no es válida. Cópiala de nuevo desde AI Studio en Ajustes.", "clave_invalida");
+      if (res.status === 403) throw new AIError("La clave no tiene permiso. Crea una nueva en AI Studio y pégala en Ajustes.", "sin_permiso");
+      if (res.status === 404) {
+        if (mi === 0 && !_retried) { S.model = ""; S.fallbacks = []; save(); return geminiCore(prompt, true, tel); }
+        break;
+      }
+      if (res.status === 429) break; // cupo de este modelo agotado: pasamos al siguiente
+      if (res.status >= 500 && attempt < 3) {
+        aiNotify(`Gemini está ocupado. Reintentando (${attempt + 1}/3)…`);
+        await sleep(attempt === 1 ? 2000 : 5000);
+        continue;
+      }
+      if (res.status >= 500) break;
+      throw new AIError(`Gemini respondió con un error (${res.status}). ${msg}`, "http_" + res.status);
+    }
+    if (offline) break;
+    if (mi + 1 < chain.length) aiNotify(`Probando con otro modelo (${chain[mi + 1]})…`);
   }
-  const data = await res.json();
-  const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
-  if (!text) throw new AIError("Gemini no devolvió respuesta. Vuelve a intentarlo.");
-  try { return JSON.parse(text); }
-  catch (e) {
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) { try { return JSON.parse(m[0]); } catch (e2) {} }
-    throw new AIError("La respuesta de Gemini llegó incompleta. Vuelve a intentarlo.");
-  }
+  if (offline) throw new AIError("No hay conexión con Gemini. Revisa tu internet y vuelve a intentarlo.", "sin_conexion");
+  if (lastStatus === 429) throw new AIError("Llegaste al límite gratuito por ahora. Espera un minuto (o hasta mañana si es el límite diario) y vuelve a intentarlo.", "limite");
+  throw new AIError("Gemini sigue saturado después de varios intentos. Tu trabajo está guardado; vuelve a intentarlo en unos minutos.", "saturado");
 }
 
 function notesDigest(maxChars = 24000) {
@@ -357,7 +453,78 @@ function conceptDigest() {
   return Object.values(S.concepts).map(c => `- ${c.id} | ${c.name} | ${STATUS_LABEL[conceptStatus(c)]} | ${c.summary}`).join("\n") || "(ninguno)";
 }
 
+/* ============ Conceptos: duplicados, unir y borrar ============ */
+// Clave para detectar el mismo concepto escrito distinto: "map()", "Map", "LEDs", "led" …
+function conceptKey(s) {
+  let k = String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\(\s*\)/g, "").replace(/[^a-z0-9]/g, "");
+  if (k.length > 3 && k.endsWith("s")) k = k.slice(0, -1);
+  return k;
+}
+function findSameConcept(id, name) {
+  if (S.concepts[id]) return id;
+  const keys = [conceptKey(id), conceptKey(name)].filter(Boolean);
+  const hit = Object.values(S.concepts).find(c => keys.includes(conceptKey(c.id)) || keys.includes(conceptKey(c.name)));
+  return hit ? hit.id : null;
+}
+function mergeConcepts(fromId, toId) {
+  const a = S.concepts[fromId], b = S.concepts[toId];
+  if (!a || !b || fromId === toId) return;
+  b.noteIds = [...new Set([...(b.noteIds || []), ...(a.noteIds || [])])];
+  b.practice = (b.practice || 0) + (a.practice || 0);
+  b.clean = (b.clean || 0) + (a.clean || 0);
+  b.related = [...new Set([...(b.related || []), ...(a.related || [])])].filter(x => x !== toId && x !== fromId);
+  if (!b.summary && a.summary) b.summary = a.summary;
+  if (a.firstSeen && (!b.firstSeen || a.firstSeen < b.firstSeen)) b.firstSeen = a.firstSeen;
+  delete S.concepts[fromId];
+  const swap = list => [...new Set((list || []).map(x => x === fromId ? toId : x))];
+  S.notes.forEach(n => n.conceptIds = swap(n.conceptIds));
+  S.challenges.forEach(c => c.conceptIds = swap(c.conceptIds));
+  Object.values(S.concepts).forEach(c => c.related = swap(c.related).filter(x => x !== c.id));
+}
+function autoMergeDuplicates() {
+  const seen = {};
+  for (const c of Object.values(S.concepts)) {
+    const k = conceptKey(c.name) || conceptKey(c.id);
+    if (!k) continue;
+    if (seen[k]) mergeConcepts(c.id, seen[k]); else seen[k] = c.id;
+  }
+}
+function conceptsOnlyIn(noteId) {
+  return Object.values(S.concepts).filter(c => (c.noteIds || []).length === 1 && c.noteIds[0] === noteId);
+}
+function deleteNote(noteId) {
+  S.notes = S.notes.filter(n => n.id !== noteId);
+  for (const c of Object.values(S.concepts)) {
+    c.noteIds = (c.noteIds || []).filter(x => x !== noteId);
+    if (!c.noteIds.length) delete S.concepts[c.id];
+  }
+  for (const c of Object.values(S.concepts)) c.related = (c.related || []).filter(x => S.concepts[x]);
+  if (S.pendingQuestion?.noteId === noteId) S.pendingQuestion = null;
+  save(); autoBackup();
+}
+
 /* ============ Notas ============ */
+const STARTERS = [
+  { key: "uso", text: "Hoy usé…", insert: "Hoy usé " },
+  { key: "aprendi", text: "Aprendí que…", insert: "Aprendí que " },
+  { key: "costo", text: "Me costó…", insert: "Me costó " },
+  { key: "idea", text: "Quiero probar…", insert: "Quiero probar " }
+];
+// Las sugerencias se retiran solas: si sus 3 últimas notas ya cubren algo, esa etiqueta deja de salir.
+function renderStarters() {
+  const recent = S.notes.filter(n => n.processed && n.facets).slice(-3);
+  const covered = k => recent.length === 3 && recent.every(n => n.facets[k]);
+  const show = STARTERS.filter(st => !covered(st.key));
+  const box = $("#starters");
+  if (!show.length) { box.innerHTML = ""; return; }
+  box.innerHTML = `<span class="small">Si te ayuda, empieza con:</span>` + show.map(st => `<button type="button" class="chip-btn" data-starter="${st.key}">${esc(st.text)}</button>`).join("");
+  box.querySelectorAll("[data-starter]").forEach(b => b.onclick = () => {
+    const st = STARTERS.find(x => x.key === b.dataset.starter), ta = $("#noteText");
+    const pre = ta.value && !ta.value.endsWith("\n") ? "\n" : "";
+    ta.value += pre + st.insert; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  });
+}
+let deleteArmed = null; // id de la nota pendiente de confirmar borrado
 async function processNote(note, allowQuestion) {
   const prompt = `Organiza esta nota de clase en conceptos.
 Conceptos que ya existen (id | nombre | estado | resumen):
@@ -370,16 +537,25 @@ ${note.clarification ? `Aclaración que dio el estudiante: """${note.clarificati
 Devuelve:
 {"concepts":[{"id":"id-existente-o-nuevo-en-kebab-case","name":"nombre corto, con sus términos","summary":"1-2 frases de lo que ÉL anotó sobre esto","related":["ids de otros conceptos relacionados"]}],
  "question":"",
- "warnings":[{"quote":"frase exacta de la nota","why":"por qué parece un error, con tacto"}]}
+ "warnings":[{"quote":"frase exacta de la nota","why":"por qué parece un error, con tacto"}],
+ "ideas":[{"quote":"la idea tal como la escribió","verdict":"posible|imposible|peligroso","message":"1-2 frases"}],
+ "facets":{"uso":false,"aprendi":false,"costo":false,"idea":false}}
 Instrucciones:
 - Incluye solo conceptos que aparecen en esta nota. Si ya existe, reutiliza su id exacto y actualiza el resumen sumando lo nuevo.
 - Un concepto es algo que se puede practicar: una función (analogRead, map, millis), un componente (potenciómetro, LED, botão), una técnica (INPUT_PULLUP, no bloquear con delay).
 - "question": ${allowQuestion ? "como máximo UNA pregunta corta, solo si algo es tan ambiguo que no puedes entender qué quiso decir. Si se entiende, deja \"\"." : "deja \"\" (no se permiten preguntas ahora)."}
-- "warnings": solo si algo parece técnicamente incorrecto. No reescribas la nota. Si no hay, [].`;
+- "warnings": solo si algo parece técnicamente incorrecto en lo que DICE que aprendió. No reescribas la nota. Si no hay, [].
+- "ideas": solo cosas que él QUIERE probar o se pregunta ("quiero probar", "qué pasa si", "me gustaría"). No se bloquean nunca:
+  · "posible": anímale en una frase y, si ayuda, dile qué tener en cuenta.
+  · "imposible": no funcionaría en la vida real (por ejemplo, energía de la nada o un componente haciendo algo que no puede). En "message" di solo que puede montarlo en Tinkercad pero que en la vida real no funcionaría; no expliques el porqué todavía.
+  · "peligroso": implica la red eléctrica (230 V) u otro riesgo real. Avisa con firmeza que en el simulador no pasa nada pero en la vida real no debe hacerlo.
+  Si no hay ideas, [].
+- "facets": true en cada una si la nota ya lo cuenta: "uso" (qué componente o herramienta usó), "aprendi" (qué aprendió), "costo" (qué le costó), "idea" (algo que quiere probar).`;
   const r = await gemini(prompt);
   const ids = [];
   for (const c of (r.concepts || [])) {
-    const id = slug(c.id || c.name); if (!id) continue;
+    let id = slug(c.id || c.name); if (!id) continue;
+    id = findSameConcept(id, c.name) || id;
     const ex = S.concepts[id];
     if (ex) {
       ex.summary = c.summary || ex.summary;
@@ -393,9 +569,23 @@ Instrucciones:
   }
   note.conceptIds = [...new Set([...(note.conceptIds || []), ...ids])];
   note.warnings = (r.warnings || []).filter(w => w && (w.quote || w.why)).map(w => ({ quote: w.quote || "", why: w.why || "", dismissed: false }));
+  const prevIdeas = note.ideas || [];
+  note.ideas = (r.ideas || []).filter(x => x && x.quote && ["posible", "imposible", "peligroso"].includes(x.verdict)).map(x => {
+    const old = prevIdeas.find(o => o.quote === x.quote);
+    return { quote: x.quote, verdict: x.verdict, message: x.message || "", explanation: old?.explanation || "", dismissed: old?.dismissed || false };
+  });
+  note.facets = Object.assign({ uso: false, aprendi: false, costo: false, idea: false }, r.facets || {});
   note.processed = true;
   S.pendingQuestion = allowQuestion && r.question ? { noteId: note.id, text: r.question } : null;
-  save();
+  save(); autoBackup();
+}
+async function explainIdea(idea) {
+  const prompt = `El estudiante quiere probar esta idea y le dijimos que en la vida real no funcionaría: """${idea.quote}"""
+Sus notas, para usar sus términos:
+${notesDigest(8000)}
+Devuelve {"explanation":"4-6 frases cortas, de cero y sin tono de profesor, explicando por qué no funcionaría en la vida real y qué pasaría de verdad. Termina con algo parecido que SÍ podría probar."}`;
+  const r = await gemini(prompt);
+  return r.explanation || "";
 }
 
 $("#saveNote").addEventListener("click", async () => {
@@ -406,8 +596,11 @@ $("#saveNote").addEventListener("click", async () => {
   S.notes.push(note); save();
   $("#noteText").value = ""; $("#noteTitle").value = "";
   const btn = $("#saveNote"); btn.disabled = true; btn.classList.add("spin");
-  st.className = "status-line"; st.textContent = "Nota guardada. Organizando conceptos…";
-  try { await processNote(note, true); st.textContent = `Listo: ${note.conceptIds.length} concepto(s) en tu mapa.`; }
+  st.className = "status-line"; st.textContent = "Nota guardada. Organizando conceptos…"; setAI(st, "nota");
+  try {
+    await processNote(note, true);
+    st.textContent = note.conceptIds.length ? `Listo: ${note.conceptIds.length} concepto(s) en tu mapa.` : "Nota guardada, pero no encontré conceptos de robótica en ella.";
+  }
   catch (e) { st.className = "status-line err"; st.textContent = `Tu nota está guardada, pero no se pudo organizar: ${e.message}`; }
   btn.disabled = false; btn.classList.remove("spin");
   renderNotes();
@@ -415,6 +608,7 @@ $("#saveNote").addEventListener("click", async () => {
 
 function renderNotes() {
   if (!$("#noteDate").value) $("#noteDate").value = today();
+  renderStarters();
   // Pregunta pendiente
   const pq = S.pendingQuestion, box = $("#pendingQuestion");
   if (pq && S.notes.find(n => n.id === pq.noteId)) {
@@ -426,7 +620,7 @@ function renderNotes() {
       const a = $("#pqAnswer").value.trim(); if (!a) return;
       const n = S.notes.find(x => x.id === pq.noteId);
       n.clarification = a; S.pendingQuestion = null; save();
-      $("#pqStatus").textContent = "Actualizando conceptos…"; $("#pqSend").disabled = true;
+      $("#pqStatus").textContent = "Actualizando conceptos…"; $("#pqSend").disabled = true; setAI($("#pqStatus"), "pregunta");
       try { await processNote(n, false); } catch (e) { $("#pqStatus").className = "status-line err"; $("#pqStatus").textContent = e.message; return; }
       renderNotes();
     };
@@ -443,27 +637,74 @@ function renderNotes() {
     const warns = (n.warnings || []).filter(w => !w.dismissed).map((w, i) => `<div class="notice"><div><strong>Posible error en tu nota:</strong> “${esc(w.quote)}”. ${esc(w.why)}</div><div class="small">Tu texto no se ha cambiado. Si quieres corregirlo, añádelo en una nota nueva.</div><div class="row"><button data-dismiss="${n.id}:${i}">Entendido</button></div></div>`).join("");
     return `<div class="note-item">
       <div class="row" style="justify-content:space-between"><div class="eyebrow">${fmtDate(n.date)}${n.title ? " · " + esc(n.title) : ""}</div>
-      ${n.processed ? "" : `<button class="ghost" data-reprocess="${n.id}">Organizar de nuevo</button>`}</div>
+      <div class="note-actions">${n.processed ? "" : `<button class="ghost" data-reprocess="${n.id}">Organizar de nuevo</button>`}<button class="ghost" data-del="${n.id}">Borrar</button></div></div>
+      ${deleteArmed === n.id ? deleteConfirmHTML(n) : ""}
       <pre>${esc(n.text)}</pre>
       ${n.clarification ? `<p class="small">Aclaración: ${esc(n.clarification)}</p>` : ""}
-      ${chips ? `<div class="chips">${chips}</div>` : ""}${warns}</div>`;
+      ${chips ? `<div class="chips">${chips}</div>` : (n.processed ? `<p class="small">No encontré conceptos de robótica en esta nota, así que no suma nada al mapa. Escribe qué componente, función o técnica viste en clase.</p>` : "")}${warns}${ideasHTML(n)}</div>`;
   }).join("");
   list.querySelectorAll("[data-dismiss]").forEach(b => b.onclick = () => {
     const [nid, i] = b.dataset.dismiss.split(":"); const n = S.notes.find(x => x.id === nid);
     const active = n.warnings.filter(w => !w.dismissed); active[+i].dismissed = true; save(); renderNotes();
   });
+  list.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { deleteArmed = b.dataset.del; renderNotes(); });
+  list.querySelectorAll("[data-del-no]").forEach(b => b.onclick = () => { deleteArmed = null; renderNotes(); });
+  list.querySelectorAll("[data-del-yes]").forEach(b => b.onclick = () => {
+    deleteNote(b.dataset.delYes); deleteArmed = null;
+    $("#noteStatus").className = "status-line"; $("#noteStatus").textContent = "Nota borrada.";
+    renderNotes();
+  });
+  list.querySelectorAll("[data-idea-ok]").forEach(b => b.onclick = () => {
+    const [nid, i] = b.dataset.ideaOk.split(":"); S.notes.find(x => x.id === nid).ideas[+i].dismissed = true; save(); renderNotes();
+  });
+  list.querySelectorAll("[data-idea-why]").forEach(b => b.onclick = async () => {
+    const [nid, i] = b.dataset.ideaWhy.split(":"); const idea = S.notes.find(x => x.id === nid).ideas[+i];
+    const st = b.parentElement.querySelector(".status-line");
+    b.disabled = true; b.classList.add("spin"); setAI(st, "idea");
+    try { idea.explanation = await explainIdea(idea); save(); renderNotes(); }
+    catch (e) { st.className = "status-line err"; st.textContent = e.message; b.disabled = false; b.classList.remove("spin"); }
+  });
   list.querySelectorAll("[data-reprocess]").forEach(b => b.onclick = async () => {
-    const n = S.notes.find(x => x.id === b.dataset.reprocess); b.disabled = true; b.classList.add("spin");
+    const n = S.notes.find(x => x.id === b.dataset.reprocess); b.disabled = true; b.classList.add("spin"); setAI($("#noteStatus"), "nota");
     try { await processNote(n, true); } catch (e) { $("#noteStatus").className = "status-line err"; $("#noteStatus").textContent = e.message; }
     renderNotes();
   });
+}
+
+function deleteConfirmHTML(n) {
+  const lost = conceptsOnlyIn(n.id);
+  const what = lost.length
+    ? `Se borrará esta nota y ${lost.length === 1 ? "1 concepto que solo aparece en ella" : lost.length + " conceptos que solo aparecen en ella"}: <strong>${lost.map(c => esc(c.name)).join(", ")}</strong>.`
+    : "Se borrará esta nota. Tus conceptos no cambian, porque también aparecen en otras notas.";
+  return `<div class="notice"><div>${what} No se puede deshacer. ¿Seguro?</div>
+    <div class="row"><button class="primary" data-del-yes="${n.id}">Sí, borrar</button><button data-del-no="1">Cancelar</button></div></div>`;
+}
+function ideasHTML(n) {
+  return (n.ideas || []).map((x, i) => {
+    if (x.dismissed) return "";
+    const id = `${n.id}:${i}`;
+    const head = { posible: "Tu idea", imposible: "Tu idea · ojo con esto", peligroso: "Tu idea · importante" }[x.verdict];
+    let body = `<div><strong>${head}:</strong> “${esc(x.quote)}”</div><p>${esc(x.message)}</p>`;
+    if (x.verdict === "imposible") {
+      body += x.explanation
+        ? `<p style="white-space:pre-wrap">${esc(x.explanation)}</p>`
+        : `<div class="row"><button data-idea-why="${id}">Sí, explícame por qué</button><span class="status-line"></span></div>`;
+    }
+    body += `<div class="row"><button class="ghost" data-idea-ok="${id}">Entendido</button></div>`;
+    return `<div class="idea ${x.verdict}">${body}</div>`;
+  }).join("");
 }
 
 /* ============ Mapa ============ */
 function renderMapa() {
   const cs = Object.values(S.concepts);
   const g = $("#conceptGrid");
-  if (!cs.length) { g.innerHTML = `<div class="card empty" style="grid-column:1/-1"><p>El mapa se llena solo con tus notas. Escribe la primera en la pestaña <a href="#notas">Notas</a>.</p></div>`; return; }
+  if (!cs.length) {
+    const msg = S.notes.length
+      ? `Tienes ${S.notes.length} nota(s), pero ninguna habla todavía de algo que se pueda practicar: un componente (LED, potenciómetro, botão), una función (analogRead, map, millis) o una técnica. Escribe lo que viste en clase en <a href="#notas">Notas</a>.`
+      : `El mapa se llena solo con tus notas. Escribe la primera en la pestaña <a href="#notas">Notas</a>.`;
+    g.innerHTML = `<div class="card empty" style="grid-column:1/-1"><p>${msg}</p></div>`; return;
+  }
   const order = { dominado: 0, practicado: 1, visto: 2 };
   cs.sort((a, b) => order[conceptStatus(a)] - order[conceptStatus(b)] || a.name.localeCompare(b.name));
   g.innerHTML = cs.map(c => {
@@ -472,14 +713,73 @@ function renderMapa() {
     return `<div class="concept"><div class="name"><i class="led ${st}" title="${STATUS_LABEL[st]}"></i>${esc(c.name)}</div>
       <p style="font-size:.9rem">${esc(c.summary)}</p>
       <div class="meta">${STATUS_LABEL[st]} · usado en ${c.practice || 0} reto(s) · ${c.clean || 0}/${DOMINADO_MIN} sin pistas</div>
-      ${rel.length ? `<div class="rel">Se conecta con: ${rel.map(esc).join(", ")}</div>` : ""}</div>`;
+      ${rel.length ? `<div class="rel">Se conecta con: ${rel.map(esc).join(", ")}</div>` : ""}
+      ${mergeOpen === c.id ? `<div class="merge-box"><label class="small">Unir “${esc(c.name)}” con:
+          <select id="mergeTarget">${cs.filter(o => o.id !== c.id).map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("")}</select></label>
+          <p class="small">Se juntan sus notas y su progreso en uno solo.</p>
+          <div class="row"><button class="primary" data-merge-yes="${esc(c.id)}">Unir</button><button data-merge-no="1">Cancelar</button></div></div>`
+        : (cs.length > 1 ? `<div class="tools"><button class="ghost" data-merge="${esc(c.id)}">Es lo mismo que…</button></div>` : "")}</div>`;
   }).join("");
+  g.querySelectorAll("[data-merge]").forEach(b => b.onclick = () => { mergeOpen = b.dataset.merge; renderMapa(); });
+  g.querySelectorAll("[data-merge-no]").forEach(b => b.onclick = () => { mergeOpen = null; renderMapa(); });
+  g.querySelectorAll("[data-merge-yes]").forEach(b => b.onclick = () => {
+    const to = $("#mergeTarget").value; mergeConcepts(b.dataset.mergeYes, to); mergeOpen = null; save(); autoBackup(); renderMapa();
+  });
 }
+let mergeOpen = null;
 
 /* ============ Reto ============ */
 function activeChallenge() { return [...S.challenges].reverse().find(c => c.status === "activo"); }
 
-async function newChallenge() {
+// Comprobaciones sin IA: lo que se puede verificar con reglas simples.
+function localIssues(r) {
+  const issues = [];
+  const lines = String(r.serialExpected || "").replace(/\\n/g, "\n").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2 || lines.length > 8) issues.push("La salida esperada debe tener entre 2 y 6 líneas.");
+  if (lines.some(l => l.length > 60)) issues.push("Alguna línea de la salida esperada es demasiado larga.");
+  const known = (r.conceptIds || []).map(slug).filter(id => S.concepts[id]);
+  if (!known.length) issues.push("El reto no usa ninguno de los conceptos de sus notas.");
+  if (!(r.steps || []).length || !(r.tests || []).length) issues.push("Faltan pasos o comprobaciones.");
+  return issues;
+}
+async function reviewChallenge(r) {
+  const prompt = `Revisa este reto ANTES de que lo vea el estudiante. Sé estricto.
+RETO: ${JSON.stringify({ title: r.title, brief: r.brief, components: r.components, steps: r.steps, serialExpected: r.serialExpected, tests: r.tests, conceptIds: r.conceptIds })}
+CONCEPTOS QUE TIENE EN SUS NOTAS (id | nombre | estado | resumen):
+${conceptDigest()}
+Comprueba:
+1. Solo usa cosas que están en sus conceptos. Lista lo que no esté.
+2. Es físicamente posible en Tinkercad con Arduino Uno y esos componentes (nada de energía de la nada ni componentes haciendo algo que no pueden).
+3. La salida esperada es fija: el mismo texto en cada ejecución, sin valores que cambien.
+4. Es seguro: nada de 230 V.
+5. Las pistas no dan el programa completo.
+Devuelve {"ok":true|false,"problems":["problema concreto"]}`;
+  const v = await gemini(prompt);
+  return { ok: v.ok !== false && !(v.problems || []).length, problems: v.problems || [] };
+}
+async function newChallenge(feedback) {
+  let problems = feedback ? [feedback] : [];
+  let r, review = { ok: false, problems: [] };
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    setAI(aiStatusEl, "reto");
+    r = await generateChallenge(problems);
+    const local = localIssues(r);
+    if (local.length) { review = { ok: false, problems: local }; }
+    else { setAI(aiStatusEl, "revision"); aiNotify("Revisando que el reto tenga sentido…"); review = await reviewChallenge(r); }
+    if (review.ok) break;
+    problems = review.problems;
+    if (attempt === 1) aiNotify("Ajustando el reto…");
+  }
+  const ch = {
+    id: uid(), date: today(), title: r.title || "Reto", project: r.project || "", brief: r.brief || "",
+    components: r.components || [], steps: r.steps || [], serialExpected: String(r.serialExpected || "").replace(/\\n/g, "\n"),
+    tests: r.tests || [], hints: r.hints || [], conceptIds: (r.conceptIds || []).map(slug).filter(id => S.concepts[id]),
+    status: "activo", hintsUsed: 0, attempts: 0, failures: 0, lastDiag: null, lesson: null, checks: [],
+    reviewWarn: review.ok ? [] : review.problems.slice(0, 3)
+  };
+  S.challenges.push(ch); save(); autoBackup();
+}
+async function generateChallenge(problems) {
   const prev = S.challenges.slice(-5).map(c => `- ${fmtDate(c.date)} "${c.title}" (${c.status}): ${c.brief}`).join("\n") || "(ninguno: este es el primero)";
   const prompt = `Crea el siguiente reto práctico para hacer en Tinkercad (Arduino Uno + C++).
 CONCEPTOS DEL ESTUDIANTE (id | nombre | estado | resumen):
@@ -504,15 +804,11 @@ Reglas:
 - Prioriza conceptos en estado Visto (aún no practicados) y combínalos con alguno ya practicado.
 - "serialExpected": entre 2 y 6 líneas cortas y deterministas (sin números que dependan del tiempo o de un valor analógico al azar). En "brief" o "steps" dile claramente que su programa debe imprimir exactamente esas líneas con Serial.println en ese orden.
 - Entre 3 y 5 "tests". Las pistas nunca incluyen el programa completo.
-- Solo Tinkercad o baja tensión. Nada de 230 V.`;
-  const r = await gemini(prompt);
-  const ch = {
-    id: uid(), date: today(), title: r.title || "Reto", project: r.project || "", brief: r.brief || "",
-    components: r.components || [], steps: r.steps || [], serialExpected: String(r.serialExpected || "").replace(/\\n/g, "\n"),
-    tests: r.tests || [], hints: r.hints || [], conceptIds: (r.conceptIds || []).map(slug).filter(id => S.concepts[id]),
-    status: "activo", hintsUsed: 0, attempts: 0, failures: 0, lastDiag: null, lesson: null, checks: []
-  };
-  S.challenges.push(ch); save();
+- Solo Tinkercad o baja tensión. Nada de 230 V.
+- Debe ser físicamente posible en Tinkercad con Arduino Uno.
+${S.challenges.some(c => c.status === "descartado") ? `RETOS QUE EL ESTUDIANTE DESCARTÓ POR NO TENER SENTIDO (no repitas esos errores):\n${S.challenges.filter(c => c.status === "descartado").slice(-3).map(c => `- "${c.title}": ${c.badReason || "sin motivo"}`).join("\n")}` : ""}
+${problems.length ? `CORRIGE ESTOS PROBLEMAS DE UN INTENTO ANTERIOR:\n${problems.map(x => "- " + x).join("\n")}` : ""}`;
+  return await gemini(prompt);
 }
 
 const normLines = t => String(t || "").split(/\r?\n/).map(l => l.trim().replace(/\s+/g, " ").toLowerCase()).filter(Boolean);
@@ -546,7 +842,7 @@ function renderReto() {
       ${historyHTML()}`;
     const b = $("#genReto");
     if (b) b.onclick = async () => {
-      b.disabled = true; b.classList.add("spin"); $("#genStatus").textContent = "Preparando un reto con tus notas…";
+      b.disabled = true; b.classList.add("spin"); $("#genStatus").textContent = "Preparando un reto con tus notas…"; setAI($("#genStatus"), "reto");
       try { await newChallenge(); renderReto(); }
       catch (e) { $("#genStatus").className = "status-line err"; $("#genStatus").textContent = e.message; b.disabled = false; b.classList.remove("spin"); }
     };
@@ -559,6 +855,7 @@ function renderReto() {
     <div class="eyebrow">${fmtDate(ch.date)}${ch.project ? " · " + esc(ch.project) : ""}</div>
     <h3 style="font-size:1.3rem">${esc(ch.title)}</h3>
     <p>${esc(ch.brief)}</p>
+    ${(ch.reviewWarn || []).length ? `<div class="notice"><div>Revisé este reto y puede que algo no cuadre: ${ch.reviewWarn.map(esc).join(" ")}</div><div class="small">Si no tiene sentido, usa el botón “Este reto no tiene sentido” y te preparo otro.</div></div>` : ""}
     ${concepts.length ? `<div class="chips">${concepts.map(c => `<span class="chip"><i class="led ${conceptStatus(c)}" style="width:8px;height:8px;margin-right:5px"></i>${esc(c.name)}</span>`).join("")}</div>` : ""}
     <div><div class="eyebrow">Componentes en Tinkercad</div><ul class="plain">${ch.components.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>
     <div><div class="eyebrow">Pasos</div><ol class="steps">${ch.steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol></div>
@@ -581,7 +878,8 @@ function renderReto() {
   </div>
   <div id="failBox"></div>
   ${ch.lastDiag ? diagHTML(ch) : ""}
-  <div class="row"><button class="ghost" id="skipReto">Dejar este reto y crear otro</button></div>`;
+  <div id="badBox"></div>
+  <div class="row"><button class="ghost" id="badReto">Este reto no tiene sentido</button><button class="ghost" id="skipReto">Dejar este reto y crear otro</button></div>`;
 
   box.querySelectorAll("[data-check]").forEach(c => c.onchange = () => { ch.checks[+c.dataset.check] = c.checked; save(); });
   $("#hintBtn") && ($("#hintBtn").onclick = () => { ch.hintsUsed++; save(); renderReto(); });
@@ -590,6 +888,23 @@ function renderReto() {
     s.dataset.armed = "1"; s.textContent = "Pulsa otra vez para confirmar";
   };
   $("#checkBtn").onclick = () => onCheck(ch);
+  $("#badReto").onclick = () => {
+    $("#badBox").innerHTML = `<div class="card"><h3>¿Qué no cuadra?</h3>
+      <label>Cuéntamelo en una frase (opcional)<input type="text" id="badReason" placeholder="Ej.: pide un sensor que no he visto"></label>
+      <p class="small">Descarto este reto y preparo otro teniéndolo en cuenta. No cuenta como fallo.</p>
+      <div class="row"><button class="primary" id="badYes">Descartar y crear otro</button><button id="badNo">Cancelar</button><span class="status-line" id="badStatus"></span></div></div>`;
+    $("#badNo").onclick = () => { $("#badBox").innerHTML = ""; };
+    $("#badYes").onclick = async () => {
+      const reason = $("#badReason").value.trim();
+      ch.status = "descartado"; ch.badReason = reason; save();
+      sendEvent("reto_descartado");
+      const b = $("#badYes"); b.disabled = true; b.classList.add("spin");
+      $("#badStatus").textContent = "Preparando otro reto…"; setAI($("#badStatus"), "reto");
+      try { await newChallenge(reason ? "El estudiante descartó el reto anterior porque: " + reason : ""); renderReto(); }
+      catch (e) { $("#badStatus").className = "status-line err"; $("#badStatus").textContent = e.message; renderReto(); }
+    };
+    $("#badBox").scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   bindDiag(ch);
 }
 
@@ -606,7 +921,7 @@ function onCheck(ch) {
     const clean = ch.hintsUsed === 0;
     for (const id of ch.conceptIds) { const c = S.concepts[id]; if (!c) continue; c.practice = (c.practice || 0) + 1; if (clean) c.clean = (c.clean || 0) + 1; }
     S.errors.filter(e => e.challengeId === ch.id).forEach(e => e.resolved = true);
-    save();
+    save(); autoBackup();
     renderReto();
     $("#retoBox").insertAdjacentHTML("afterbegin", `<div class="card"><p class="pass">¡Reto superado!</p><p>${clean ? "Sin pistas: cuenta para Dominado en " : "Contado como práctica de "}${ch.conceptIds.map(id => esc(S.concepts[id]?.name || id)).join(", ")}.</p><p class="small">Mira cómo va tu <a href="#mapa">mapa</a>.</p></div>`);
     return;
@@ -631,8 +946,8 @@ function showFailForm(ch, got, cmp, reason) {
     if (!thought) { $("#diagStatus").className = "status-line err"; $("#diagStatus").textContent = "Escribe qué pensaste. Es lo que hace útil el cuaderno."; return; }
     const code = $("#codeIn").value;
     const err = { id: uid(), date: today(), challengeId: ch.id, challengeTitle: ch.title, thought, got, missing: cmp.rows.filter(r => !r.ok).map(r => r.line), diag: null, resolved: false };
-    S.errors.push(err); ch.failures++; save();
-    const b = $("#diagBtn"); b.disabled = true; b.classList.add("spin"); $("#diagStatus").className = "status-line"; $("#diagStatus").textContent = "Guardado. Buscando la causa…";
+    S.errors.push(err); ch.failures++; save(); autoBackup();
+    const b = $("#diagBtn"); b.disabled = true; b.classList.add("spin"); $("#diagStatus").className = "status-line"; $("#diagStatus").textContent = "Guardado. Buscando la causa…"; setAI($("#diagStatus"), "diagnostico");
     try {
       const d = await diagnose(ch, got, cmp, thought, code);
       err.diag = d; ch.lastDiag = d; ch.lesson = null; save(); renderReto();
@@ -686,7 +1001,7 @@ function bindDiag(ch) {
   const y = $("#teachYes"), n = $("#teachNo"), t = $("#toNote");
   if (n) n.onclick = () => { $("#teachStatus").textContent = "De acuerdo. Puedes buscarlo por tu cuenta o volver aquí cuando quieras."; n.disabled = true; };
   if (y) y.onclick = async () => {
-    y.disabled = true; y.classList.add("spin");
+    y.disabled = true; y.classList.add("spin"); setAI($("#teachStatus"), "leccion");
     try { ch.lesson = await teach(ch.lastDiag.conceptName || ch.lastDiag.message); save(); renderReto(); $("#diagCard")?.scrollIntoView({ behavior: "smooth" }); }
     catch (e) { $("#teachStatus").className = "status-line err"; $("#teachStatus").textContent = e.message; y.disabled = false; y.classList.remove("spin"); }
   };
@@ -704,7 +1019,7 @@ Devuelve:
 function historyHTML() {
   const done = S.challenges.filter(c => c.status !== "activo").reverse();
   if (!done.length) return "";
-  return `<div class="card"><h3>Retos anteriores</h3><div style="display:grid;gap:6px">${done.map(c => `<div class="row" style="justify-content:space-between"><span>${esc(c.title)}</span><span class="small">${fmtDate(c.date)} · ${c.status === "superado" ? (c.hintsUsed ? "superado con pistas" : "superado sin pistas") : "dejado"}</span></div>`).join("")}</div></div>`;
+  return `<div class="card"><h3>Retos anteriores</h3><div style="display:grid;gap:6px">${done.map(c => `<div class="row" style="justify-content:space-between"><span>${esc(c.title)}</span><span class="small">${fmtDate(c.date)} · ${c.status === "superado" ? (c.hintsUsed ? "superado con pistas" : "superado sin pistas") : c.status === "descartado" ? "descartado por no tener sentido" : "dejado"}</span></div>`).join("")}</div></div>`;
 }
 
 /* ============ Errores ============ */
@@ -720,11 +1035,91 @@ function renderErrores() {
   </div>`).join("");
 }
 
+/* ============ Respaldo automático en una carpeta del PC ============ */
+// Guarda el "permiso de carpeta" en IndexedDB (localStorage no puede guardarlo).
+const canAutoBackup = typeof window.showDirectoryPicker === "function";
+function idb(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("tinkernotes", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("kv");
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const tx = req.result.transaction("kv", mode), st = tx.objectStore("kv");
+      const r = fn(st); tx.oncomplete = () => resolve(r?.result); tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+const getDirHandle = () => idb("readonly", st => st.get("backupDir")).catch(() => null);
+const setDirHandle = h => idb("readwrite", st => h ? st.put(h, "backupDir") : st.delete("backupDir")).catch(() => {});
+let autoState = "off"; // off | on | needs-permission
+async function refreshAutoState() {
+  if (!canAutoBackup) { autoState = "off"; return; }
+  const h = await getDirHandle();
+  if (!h) { autoState = "off"; return; }
+  try { autoState = (await h.queryPermission({ mode: "readwrite" })) === "granted" ? "on" : "needs-permission"; }
+  catch (e) { autoState = "needs-permission"; }
+}
+function weekTag() {
+  const d = new Date(); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return `${t.getUTCFullYear()}-S${String(Math.ceil(((t - y0) / 864e5 + 1) / 7)).padStart(2, "0")}`;
+}
+async function writeFile(dir, name, text) {
+  const fh = await dir.getFileHandle(name, { create: true });
+  const w = await fh.createWritable(); await w.write(text); await w.close();
+}
+let autoTimer = null;
+function autoBackup() {
+  if (!canAutoBackup) return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(async () => {
+    try {
+      const h = await getDirHandle(); if (!h) return;
+      if ((await h.queryPermission({ mode: "readwrite" })) !== "granted") { autoState = "needs-permission"; renderBanner(); return; }
+      const text = JSON.stringify(S, null, 2);
+      await writeFile(h, "tinker-notes-respaldo.json", text);            // siempre el más reciente
+      await writeFile(h, `tinker-notes-respaldo-${weekTag()}.json`, text); // una copia por semana
+      S.lastBackup = today(); S.lastAutoBackup = new Date().toISOString(); save(); autoState = "on";
+      if (location.hash === "#ajustes") renderAutoBackup();
+    } catch (e) { console.warn("Respaldo automático:", e); }
+  }, 1500);
+}
+function renderAutoBackup() {
+  const box = $("#autoBox");
+  if (!canAutoBackup) { box.innerHTML = `<p class="small">Tu navegador no permite el respaldo automático. Usa Chrome o Edge, o descarga el respaldo a mano una vez por semana.</p>`; return; }
+  if (autoState === "on") {
+    box.innerHTML = `<p class="small"><i class="led dominado" style="width:9px;height:9px;margin-right:6px"></i>Activado. Cada cambio importante se guarda solo en tu carpeta${S.lastAutoBackup ? `; último: ${new Date(S.lastAutoBackup).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}` : ""}.</p>
+      <div class="row"><button class="ghost" id="autoChange">Cambiar carpeta</button><button class="ghost" id="autoOff">Desactivar</button></div>`;
+  } else if (autoState === "needs-permission") {
+    box.innerHTML = `<p class="small"><i class="led practicado" style="width:9px;height:9px;margin-right:6px"></i>El navegador pide confirmar otra vez el permiso de la carpeta.</p>
+      <div class="row"><button class="primary" id="autoResume">Reactivar respaldo automático</button><button class="ghost" id="autoOff">Desactivar</button></div>`;
+  } else {
+    box.innerHTML = `<p class="small">Elige una carpeta de tu PC (por ejemplo, Documentos) y la app guardará ahí tu respaldo sola, sin que tengas que acordarte.</p>
+      <div class="row"><button class="primary" id="autoOn">Elegir carpeta</button></div>`;
+  }
+  const pick = async () => {
+    try {
+      const h = await window.showDirectoryPicker({ id: "tinkernotes", mode: "readwrite", startIn: "documents" });
+      await setDirHandle(h); autoState = "on"; autoBackup(); renderAutoBackup();
+    } catch (e) { /* canceló el selector */ }
+  };
+  $("#autoOn") && ($("#autoOn").onclick = pick);
+  $("#autoChange") && ($("#autoChange").onclick = pick);
+  $("#autoOff") && ($("#autoOff").onclick = async () => { await setDirHandle(null); autoState = "off"; renderAutoBackup(); renderBanner(); });
+  $("#autoResume") && ($("#autoResume").onclick = async () => {
+    const h = await getDirHandle();
+    try { if (h && (await h.requestPermission({ mode: "readwrite" })) === "granted") { autoState = "on"; autoBackup(); } } catch (e) {}
+    renderAutoBackup(); renderBanner();
+  });
+}
+
 /* ============ Ajustes y respaldo ============ */
 function renderAjustes() {
   $("#apiKey").value = getKey();
   fillModelSelect(S.modelList || [], S.modelAuto ? "" : S.model);
   $("#lastBackup").textContent = S.lastBackup ? `Último respaldo: ${fmtDate(S.lastBackup)}.` : "Todavía no has descargado ningún respaldo.";
+  renderAutoBackup();
 }
 $("#showKey").onclick = () => { const i = $("#apiKey"); const show = i.type === "password"; i.type = show ? "text" : "password"; $("#showKey").textContent = show ? "Ocultar" : "Mostrar"; };
 function fillModelSelect(ids, selected) {
@@ -735,10 +1130,11 @@ function fillModelSelect(ids, selected) {
 $("#saveKey").onclick = async () => {
   setKey($("#apiKey").value.trim());
   const chosen = $("#model").value;
-  const st = $("#keyStatus"); st.className = "status-line"; st.textContent = "Probando…";
+  const st = $("#keyStatus"); st.className = "status-line"; st.textContent = "Probando…"; setAI(st, "prueba");
   try {
     const ids = await listModels();
     S.modelList = ids.filter(id => scoreModel(id) >= 0);
+    S.fallbacks = ids.filter(id => scoreFallback(id) >= 0).sort((a, b) => scoreFallback(b) - scoreFallback(a)).slice(0, 4);
     S.modelAuto = !chosen || !ids.includes(chosen);
     S.model = S.modelAuto ? await pickModel() : chosen;
     save(); fillModelSelect(S.modelList, S.modelAuto ? "" : S.model);
@@ -762,13 +1158,22 @@ $("#importFile").onchange = async e => {
   e.target.value = "";
 };
 $("#importNo").onclick = () => { pendingImport = null; $("#importConfirm").hidden = true; $("#backupStatus").textContent = ""; };
-$("#importYes").onclick = () => { S = Object.assign(blank(), pendingImport); save(); pendingImport = null; $("#importConfirm").hidden = true; $("#backupStatus").className = "status-line"; $("#backupStatus").textContent = "Respaldo restaurado."; renderAjustes(); renderBanner(); };
+$("#importYes").onclick = () => { S = Object.assign(blank(), pendingImport); autoMergeDuplicates(); save(); autoBackup(); pendingImport = null; $("#importConfirm").hidden = true; $("#backupStatus").className = "status-line"; $("#backupStatus").textContent = "Respaldo restaurado."; renderAjustes(); renderBanner(); };
 
 function renderBanner() {
   const hasData = S.notes.length > 0;
   const days = S.lastBackup ? (Date.now() - new Date(S.lastBackup).getTime()) / 864e5 : Infinity;
   const firstNote = S.notes[0] ? (Date.now() - new Date(S.notes[0].created).getTime()) / 864e5 : 0;
-  $("#backupBanner").hidden = !(hasData && days > 7 && firstNote > 7);
+  const banner = $("#backupBanner");
+  if (autoState === "needs-permission" && hasData) {
+    banner.innerHTML = `<div>El respaldo automático está en pausa: el navegador pide confirmar el permiso de tu carpeta.</div><div class="row"><button class="primary" type="button" data-go="ajustes">Reactivarlo en Ajustes</button></div>`;
+    banner.querySelector("[data-go]").onclick = () => { location.hash = "ajustes"; };
+    banner.hidden = false; return;
+  }
+  banner.innerHTML = `<div>Hace más de 7 días que no guardas un respaldo. Tus datos viven solo en este navegador.</div><div class="row"><button class="primary" data-act="export">Descargar respaldo ahora</button>${canAutoBackup ? `<button type="button" data-go="ajustes">Activar respaldo automático</button>` : ""}</div>`;
+  banner.querySelector('[data-act="export"]').onclick = exportBackup;
+  banner.querySelector("[data-go]") && (banner.querySelector("[data-go]").onclick = () => { location.hash = "ajustes"; });
+  banner.hidden = !(hasData && days > 7 && firstNote > 7);
 }
 
 /* ============ Rutas ============ */
@@ -782,7 +1187,9 @@ function route() {
   renderBanner();
 }
 window.addEventListener("hashchange", route);
+autoMergeDuplicates(); save();
 route();
+refreshAutoState().then(() => { renderBanner(); if (location.hash === "#ajustes") renderAutoBackup(); });
 </script>
 </body>
 </html>
