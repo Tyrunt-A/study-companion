@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tinker Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: banco de trabajo — barra superior con pestañas, una columna de trabajo de ~760px, el Serial Monitor como panel oscuro propio */
+:root {
+  --bg: #eceee8;          /* protoboard */
+  --panel: #fbfcf9;
+  --ink: #1c231f;
+  --muted: #5a645e;
+  --line: #d0d6cd;
+  --accent: #1d65a6;      /* cable jumper azul */
+  --accent-ink: #ffffff;
+  --led-off: #b9c0b8;
+  --led-amber: #d38a00;
+  --led-green: #23885a;
+  --led-red: #c23b2e;
+  --serial-bg: #0f2a33;   /* Serial Monitor */
+  --serial-ink: #d6efe9;
+  --warn-bg: #fff4dc;
+  --warn-ink: #6b4a00;
+  --f-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121714; --panel: #1a201c; --ink: #e2e8e1; --muted: #9aa49c; --line: #2c3530;
+  --accent: #5ba3e6; --accent-ink: #0b1a26; --led-off: #47504a; --led-amber: #f0a72a; --led-green: #3fbf83; --led-red: #e8695c;
+  --serial-bg: #0a1c22; --serial-ink: #c9ebe3; --warn-bg: #3a2e12; --warn-ink: #f3d79a; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121714; --panel: #1a201c; --ink: #e2e8e1; --muted: #9aa49c; --line: #2c3530;
+  --accent: #5ba3e6; --accent-ink: #0b1a26; --led-off: #47504a; --led-amber: #f0a72a; --led-green: #3fbf83; --led-red: #e8695c;
+  --serial-bg: #0a1c22; --serial-ink: #c9ebe3; --warn-bg: #3a2e12; --warn-ink: #f3d79a; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body); }
+a { color: var(--accent); }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.45rem; }
+h3 { font-size: 1.08rem; }
+p { margin: 0; }
+.wrap { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header.top { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header .wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding-block: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; letter-spacing: .02em; }
+.brand .leds { display: flex; gap: 4px; }
+.brand .leds i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+nav.tabs a { text-decoration: none; color: var(--muted); padding: 6px 11px; border-radius: 6px; font-weight: 500; font-size: .92rem; }
+nav.tabs a:hover { color: var(--ink); background: var(--bg); }
+nav.tabs a[aria-current="page"] { color: var(--ink); background: var(--bg); box-shadow: inset 0 -2px 0 var(--accent); }
+
+main { padding-block: 26px 60px; }
+section.view { display: grid; gap: 18px; }
+.lede { color: var(--muted); max-width: 62ch; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.eyebrow { font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+label { font-weight: 500; font-size: .92rem; display: grid; gap: 6px; }
+input[type=text], input[type=password], input[type=date], textarea, select {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; width: 100%; }
+textarea { min-height: 150px; resize: vertical; }
+textarea.mono, .mono { font-family: var(--f-mono); font-size: .88rem; }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font: inherit; font-weight: 500; border-radius: 7px; padding: 9px 15px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.07); }
+button.ghost { background: transparent; border-color: transparent; color: var(--muted); padding-inline: 8px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.small { font-size: .85rem; color: var(--muted); }
+
+.notice { border-radius: 8px; padding: 12px 14px; background: var(--warn-bg); color: var(--warn-ink); display: grid; gap: 8px; }
+.notice.info { background: var(--bg); color: var(--ink); border: 1px dashed var(--line); }
+.status-line { font-size: .9rem; color: var(--muted); min-height: 1.4em; }
+.status-line.err { color: var(--led-red); }
+
+/* LED de estado de un concepto */
+.led { width: 11px; height: 11px; border-radius: 50%; display: inline-block; flex: none; background: var(--led-off); box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.led.visto { background: var(--led-off); }
+.led.practicado { background: var(--led-amber); box-shadow: 0 0 6px var(--led-amber); }
+.led.dominado { background: var(--led-green); box-shadow: 0 0 7px var(--led-green); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .86rem; color: var(--muted); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+.concepts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.concept { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 12px 13px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.concept .name { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.concept .meta { font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.concept .rel { font-size: .8rem; color: var(--muted); }
+
+.note-item { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 6px; }
+.note-item:first-child { border-top: 0; padding-top: 0; }
+.note-item pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-family: var(--f-body); font-size: .92rem; color: var(--ink); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: .78rem; border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; color: var(--muted); background: var(--bg); }
+
+ol.steps, ul.plain { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.checks { display: grid; gap: 6px; }
+.checks label { display: flex; gap: 9px; align-items: flex-start; font-weight: 400; }
+.checks input { margin-top: 4px; }
+
+.serial { background: var(--serial-bg); color: var(--serial-ink); border-radius: 9px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.serial .bar { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: .78rem; opacity: .75; }
+.serial pre { margin: 0; font-family: var(--f-mono); font-size: .86rem; white-space: pre-wrap; word-break: break-word; }
+.serial textarea { background: rgba(255,255,255,.06); color: var(--serial-ink); border-color: rgba(255,255,255,.15); font-family: var(--f-mono); font-size: .86rem; min-height: 120px; }
+.cmp { display: grid; gap: 3px; font-family: var(--f-mono); font-size: .85rem; }
+.cmp div { display: flex; gap: 8px; }
+.cmp .ok::before { content: "✓"; color: var(--led-green); }
+.cmp .no::before { content: "✗"; color: var(--led-red); }
+
+.hint { border-left: 3px solid var(--led-amber); padding: 4px 0 4px 12px; }
+.diag { border-radius: 8px; padding: 14px; display: grid; gap: 8px; border: 1px solid var(--line); background: var(--bg); }
+.diag .kind { font-family: var(--f-display); font-weight: 600; }
+.diag.hueco .kind { color: var(--accent); }
+.diag.aplicacion .kind { color: var(--led-amber); }
+.pass { color: var(--led-green); font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; }
+
+.err-item { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px; }
+.err-item:first-child { border-top: 0; padding-top: 0; }
+.err-item .q { font-style: italic; }
+.empty { text-align: left; color: var(--muted); display: grid; gap: 8px; }
+.guide ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
+code { font-family: var(--f-mono); font-size: .88em; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+.spin::after { content: ""; display: inline-block; width: .8em; height: .8em; margin-left: 8px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: r .8s linear infinite; vertical-align: -1px; }
+@keyframes r { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin::after { animation: none; } }
+@media (max-width: 560px) { nav.tabs { margin-left: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="leds"><i style="background:var(--led-red)"></i><i style="background:var(--led-amber)"></i><i style="background:var(--led-green)"></i></span>Tinker Notes</div>
+    <nav class="tabs" id="tabs">
+      <a href="#notas">Notas</a>
+      <a href="#mapa">Mapa</a>
+      <a href="#reto">Reto</a>
+      <a href="#errores">Errores</a>
+      <a href="#ajustes">Ajustes</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="backupBanner" class="notice" hidden style="margin-bottom:18px">
+    <div>Hace más de 7 días que no descargas un respaldo. Tus datos viven solo en este navegador.</div>
+    <div class="row"><button class="primary" data-act="export">Descargar respaldo ahora</button></div>
+  </div>
+
+  <!-- NOTAS -->
+  <section class="view" id="v-notas" hidden>
+    <div><h2>Notas de clase</h2><p class="lede">Escribe los highlights de la clase con tus palabras. La app los ordena en conceptos y nunca cambia lo que escribiste.</p></div>
+    <div class="card">
+      <div class="row" style="align-items:flex-end">
+        <label style="flex:1 1 140px">Fecha<input type="date" id="noteDate"></label>
+        <label style="flex:3 1 240px">Tema (opcional)<input type="text" id="noteTitle" placeholder="Ej.: semáforo con potenciómetro"></label>
+      </div>
+      <label>Lo que aprendí hoy<textarea id="noteText" placeholder="Ej.: analogRead lee el potenciómetro de 0 a 1023. Con map() lo paso a otro rango. El botão va con INPUT_PULLUP y entonces apretado da LOW..."></textarea></label>
+      <div class="row"><button class="primary" id="saveNote">Guardar y organizar</button><span class="status-line" id="noteStatus"></span></div>
+    </div>
+    <div id="pendingQuestion"></div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h3>Tus notas</h3><span class="small" id="noteCount"></span></div>
+      <div id="noteList" style="display:grid;gap:12px"></div>
+    </div>
+  </section>
+
+  <!-- MAPA -->
+  <section class="view" id="v-mapa" hidden>
+    <div><h2>Mapa de conceptos</h2><p class="lede">Cada concepto sale de tus notas. El LED muestra cómo vas con él.</p></div>
+    <div class="legend">
+      <span><i class="led visto"></i>Visto: está en tus notas</span>
+      <span><i class="led practicado"></i>Practicado: lo usaste en un reto</span>
+      <span><i class="led dominado"></i>Dominado: 3 retos bien sin pistas</span>
+    </div>
+    <div id="conceptGrid" class="concepts"></div>
+  </section>
+
+  <!-- RETO -->
+  <section class="view" id="v-reto" hidden>
+    <div><h2>Reto en Tinkercad</h2><p class="lede">Un reto al día, armado solo con lo que tienes en tus notas. Cada reto continúa el anterior, como un proyecto que crece.</p></div>
+    <div id="retoBox" style="display:grid;gap:18px"></div>
+  </section>
+
+  <!-- ERRORES -->
+  <section class="view" id="v-errores" hidden>
+    <div><h2>Cuaderno de errores</h2><p class="lede">Cada fallo queda aquí con lo que pensaste en ese momento. Releerlo es la mejor forma de no repetirlo.</p></div>
+    <div class="card" id="errList"></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section class="view" id="v-ajustes" hidden>
+    <div><h2>Ajustes</h2></div>
+    <div class="card guide" id="keyGuide">
+      <h3>Tu clave gratuita de Gemini</h3>
+      <p class="small">La app usa Gemini para organizar notas, crear retos y diagnosticar fallos. La clave es tuya, es gratis y se guarda solo en este navegador.</p>
+      <ol>
+        <li>Abre <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> e inicia sesión con tu cuenta de Google.</li>
+        <li>Si es la primera vez, acepta los términos de Google AI Studio.</li>
+        <li>Pulsa <strong>Create API key</strong> (Crear clave de API). Si te pide un proyecto, elige el que te propone o crea uno nuevo.</li>
+        <li>Copia la clave (empieza por <code>AIza</code>) y pégala aquí abajo.</li>
+        <li>Pulsa <strong>Guardar y probar</strong>. Si sale "Conexión correcta", ya está.</li>
+      </ol>
+      <p class="small">No compartas esta clave con nadie ni la pegues en otro sitio.</p>
+      <label>Clave de API<input type="password" id="apiKey" placeholder="AIza..." autocomplete="off"></label>
+      <label>Modelo<select id="model" class="mono"><option value="">Automático (el Flash más reciente)</option></select></label>
+      <p class="small">Déjalo en Automático. Google retira modelos cada cierto tiempo y la app se adapta sola.</p>
+      <div class="row"><button class="primary" id="saveKey">Guardar y probar</button><button class="ghost" id="showKey">Mostrar</button><span class="status-line" id="keyStatus"></span></div>
+    </div>
+    <div class="card">
+      <h3>Respaldo</h3>
+      <p class="small">Tus notas y tu progreso viven solo en este navegador. Usa siempre el mismo navegador, nunca el modo incógnito, y descarga un respaldo una vez por semana.</p>
+      <p class="small" id="lastBackup"></p>
+      <div class="row">
+        <button class="primary" data-act="export">Descargar respaldo</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden aria-label="Archivo de respaldo"><button type="button" id="importBtn">Restaurar desde archivo</button>
+      </div>
+      <div id="importConfirm" class="notice" hidden>
+        <div>Restaurar reemplaza todo lo que hay ahora en la app por el contenido del archivo.</div>
+        <div class="row"><button class="primary" id="importYes">Sí, restaurar</button><button id="importNo">Cancelar</button></div>
+      </div>
+      <span class="status-line" id="backupStatus"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ============ Estado ============ */
+const STORE_KEY = "tinkernotes.v1";
+const KEY_KEY = "tinkernotes.apikey";
+const DEFAULT_MODEL = ""; // vacío = la app elige el Flash más reciente disponible para la clave
+const DOMINADO_MIN = 3;
+
+function blank() {
+  return { version: 1, notes: [], concepts: {}, challenges: [], errors: [], pendingQuestion: null, lastBackup: null, model: DEFAULT_MODEL, modelAuto: true, modelList: [] };
+}
+let S = load();
+if (S.model === "gemini-2.5-flash") { S.model = ""; S.modelAuto = true; }
+function load() {
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) return Object.assign(blank(), JSON.parse(raw)); } catch (e) {}
+  return blank();
+}
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) { console.warn(e); } }
+function getKey() { try { return localStorage.getItem(KEY_KEY) || ""; } catch (e) { return ""; } }
+function setKey(k) { try { localStorage.setItem(KEY_KEY, k); } catch (e) {} }
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const slug = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9()]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+const fmtDate = iso => { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-"); return `${d}/${m}/${y}`; };
+
+function conceptStatus(c) {
+  if ((c.clean || 0) >= DOMINADO_MIN) return "dominado";
+  if ((c.practice || 0) > 0) return "practicado";
+  return "visto";
+}
+const STATUS_LABEL = { visto: "Visto", practicado: "Practicado", dominado: "Dominado" };
+
+/* ============ Gemini ============ */
+const SYSTEM = `Eres el motor de "Tinker Notes", una app que acompaña a un estudiante de un curso de robótica (Arduino programado en C++ dentro del simulador Tinkercad).
+Reglas que nunca rompes:
+1. La única fuente de verdad son las NOTAS del estudiante. No conoces el temario, el cronograma ni las diapositivas del curso, y no los supones.
+2. Usa los términos tal como él los escribe, aunque estén en portugués (por ejemplo "botão", "peões").
+3. Nunca das la solución completa ni el código completo de un reto. Das pistas.
+4. Seguridad: solo simulador Tinkercad o kits de baja tensión (corriente continua de 12 V o menos). Nunca propones montajes conectados a la red eléctrica (230 V). Si sus notas lo mencionan, lo avisas.
+5. Escribes en español claro, frases cortas, sin asumir conocimientos previos.
+6. Respondes SOLO con JSON válido con la forma exacta que se te pide, sin texto alrededor.`;
+
+class AIError extends Error {}
+async function listModels() {
+  const key = getKey();
+  let res;
+  try { res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { headers: { "x-goog-api-key": key } }); }
+  catch (e) { throw new AIError("No hay conexión con Gemini. Revisa tu internet y vuelve a intentarlo."); }
+  if (!res.ok) {
+    if (res.status === 400 || res.status === 403) throw new AIError("La clave no es válida. Cópiala de nuevo desde AI Studio en Ajustes.");
+    throw new AIError(`No pude consultar los modelos de Gemini (${res.status}).`);
+  }
+  const data = await res.json();
+  return (data.models || []).filter(m => (m.supportedGenerationMethods || []).includes("generateContent")).map(m => m.name.replace(/^models\//, ""));
+}
+function scoreModel(id) {
+  if (!/flash/.test(id) || /lite|image|tts|live|audio|embed|native|robotics|computer|exp/.test(id)) return -1;
+  const v = parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0);
+  // Preferimos el estable más nuevo; un preview solo si no hay estable.
+  return (/preview/.test(id) ? 0 : 1000) + v * 10 - (/latest/.test(id) ? 0.5 : 0);
+}
+async function pickModel() {
+  const ids = await listModels();
+  const best = ids.map(id => [id, scoreModel(id)]).filter(x => x[1] >= 0).sort((a, b) => b[1] - a[1])[0];
+  if (!best) throw new AIError("Tu clave no tiene ningún modelo Flash disponible. Elige uno a mano en Ajustes.");
+  return best[0];
+}
+async function gemini(prompt, _retried) {
+  const key = getKey();
+  if (!key) throw new AIError("Falta tu clave de Gemini. Ve a Ajustes y pégala.");
+  if (!S.model) { S.model = await pickModel(); save(); }
+  const model = S.model;
+  let res;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.5 }
+      })
+    });
+  } catch (e) { throw new AIError("No hay conexión con Gemini. Revisa tu internet y vuelve a intentarlo."); }
+  if (!res.ok) {
+    let msg = ""; try { msg = (await res.json()).error?.message || ""; } catch (e) {}
+    if (res.status === 400 && /API key/i.test(msg)) throw new AIError("La clave no es válida. Cópiala de nuevo desde AI Studio en Ajustes.");
+    if (res.status === 403) throw new AIError("La clave no tiene permiso. Crea una nueva en AI Studio y pégala en Ajustes.");
+    if (res.status === 404 && !_retried) { S.model = ""; save(); return gemini(prompt, true); }
+    if (res.status === 404) throw new AIError(`Google ya no ofrece el modelo "${model}" y no encontré otro disponible. Revisa en Ajustes.`);
+    if (res.status === 429) throw new AIError("Llegaste al límite gratuito por ahora. Espera un minuto (o hasta mañana si es el límite diario) y vuelve a intentarlo.");
+    if (res.status >= 500) throw new AIError("Gemini está saturado en este momento. Vuelve a intentarlo en un minuto.");
+    throw new AIError(`Gemini respondió con un error (${res.status}). ${msg}`);
+  }
+  const data = await res.json();
+  const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
+  if (!text) throw new AIError("Gemini no devolvió respuesta. Vuelve a intentarlo.");
+  try { return JSON.parse(text); }
+  catch (e) {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) { try { return JSON.parse(m[0]); } catch (e2) {} }
+    throw new AIError("La respuesta de Gemini llegó incompleta. Vuelve a intentarlo.");
+  }
+}
+
+function notesDigest(maxChars = 24000) {
+  let out = "";
+  for (const n of [...S.notes].reverse()) {
+    let block = `--- Nota ${fmtDate(n.date)}${n.title ? " · " + n.title : ""}\n${n.text}\n`;
+    if (n.clarification) block += `(Aclaración del estudiante: ${n.clarification})\n`;
+    if (out.length + block.length > maxChars) break;
+    out = block + out;
+  }
+  return out || "(sin notas)";
+}
+function conceptDigest() {
+  return Object.values(S.concepts).map(c => `- ${c.id} | ${c.name} | ${STATUS_LABEL[conceptStatus(c)]} | ${c.summary}`).join("\n") || "(ninguno)";
+}
+
+/* ============ Notas ============ */
+async function processNote(note, allowQuestion) {
+  const prompt = `Organiza esta nota de clase en conceptos.
+Conceptos que ya existen (id | nombre | estado | resumen):
+${conceptDigest()}
+
+NOTA NUEVA (${fmtDate(note.date)}${note.title ? ", tema: " + note.title : ""}):
+"""${note.text}"""
+${note.clarification ? `Aclaración que dio el estudiante: """${note.clarification}"""` : ""}
+
+Devuelve:
+{"concepts":[{"id":"id-existente-o-nuevo-en-kebab-case","name":"nombre corto, con sus términos","summary":"1-2 frases de lo que ÉL anotó sobre esto","related":["ids de otros conceptos relacionados"]}],
+ "question":"",
+ "warnings":[{"quote":"frase exacta de la nota","why":"por qué parece un error, con tacto"}]}
+Instrucciones:
+- Incluye solo conceptos que aparecen en esta nota. Si ya existe, reutiliza su id exacto y actualiza el resumen sumando lo nuevo.
+- Un concepto es algo que se puede practicar: una función (analogRead, map, millis), un componente (potenciómetro, LED, botão), una técnica (INPUT_PULLUP, no bloquear con delay).
+- "question": ${allowQuestion ? "como máximo UNA pregunta corta, solo si algo es tan ambiguo que no puedes entender qué quiso decir. Si se entiende, deja \"\"." : "deja \"\" (no se permiten preguntas ahora)."}
+- "warnings": solo si algo parece técnicamente incorrecto. No reescribas la nota. Si no hay, [].`;
+  const r = await gemini(prompt);
+  const ids = [];
+  for (const c of (r.concepts || [])) {
+    const id = slug(c.id || c.name); if (!id) continue;
+    const ex = S.concepts[id];
+    if (ex) {
+      ex.summary = c.summary || ex.summary;
+      ex.name = ex.name || c.name;
+      if (!ex.noteIds.includes(note.id)) ex.noteIds.push(note.id);
+      ex.related = [...new Set([...(ex.related || []), ...(c.related || []).map(slug)])].filter(x => x !== id);
+    } else {
+      S.concepts[id] = { id, name: c.name || id, summary: c.summary || "", related: (c.related || []).map(slug).filter(x => x !== id), noteIds: [note.id], practice: 0, clean: 0, firstSeen: note.date };
+    }
+    ids.push(id);
+  }
+  note.conceptIds = [...new Set([...(note.conceptIds || []), ...ids])];
+  note.warnings = (r.warnings || []).filter(w => w && (w.quote || w.why)).map(w => ({ quote: w.quote || "", why: w.why || "", dismissed: false }));
+  note.processed = true;
+  S.pendingQuestion = allowQuestion && r.question ? { noteId: note.id, text: r.question } : null;
+  save();
+}
+
+$("#saveNote").addEventListener("click", async () => {
+  const text = $("#noteText").value.trim();
+  const st = $("#noteStatus");
+  if (!text) { st.className = "status-line err"; st.textContent = "Escribe algo de la clase antes de guardar."; return; }
+  const note = { id: uid(), date: $("#noteDate").value || today(), title: $("#noteTitle").value.trim(), text, clarification: "", conceptIds: [], warnings: [], processed: false, created: new Date().toISOString() };
+  S.notes.push(note); save();
+  $("#noteText").value = ""; $("#noteTitle").value = "";
+  const btn = $("#saveNote"); btn.disabled = true; btn.classList.add("spin");
+  st.className = "status-line"; st.textContent = "Nota guardada. Organizando conceptos…";
+  try { await processNote(note, true); st.textContent = `Listo: ${note.conceptIds.length} concepto(s) en tu mapa.`; }
+  catch (e) { st.className = "status-line err"; st.textContent = `Tu nota está guardada, pero no se pudo organizar: ${e.message}`; }
+  btn.disabled = false; btn.classList.remove("spin");
+  renderNotes();
+});
+
+function renderNotes() {
+  if (!$("#noteDate").value) $("#noteDate").value = today();
+  // Pregunta pendiente
+  const pq = S.pendingQuestion, box = $("#pendingQuestion");
+  if (pq && S.notes.find(n => n.id === pq.noteId)) {
+    box.innerHTML = `<div class="card"><div class="eyebrow">Una pregunta sobre tu nota</div><p>${esc(pq.text)}</p>
+      <label>Tu respuesta<input type="text" id="pqAnswer"></label>
+      <div class="row"><button class="primary" id="pqSend">Responder</button><button class="ghost" id="pqSkip">Saltar</button><span class="status-line" id="pqStatus"></span></div></div>`;
+    $("#pqSkip").onclick = () => { S.pendingQuestion = null; save(); renderNotes(); };
+    $("#pqSend").onclick = async () => {
+      const a = $("#pqAnswer").value.trim(); if (!a) return;
+      const n = S.notes.find(x => x.id === pq.noteId);
+      n.clarification = a; S.pendingQuestion = null; save();
+      $("#pqStatus").textContent = "Actualizando conceptos…"; $("#pqSend").disabled = true;
+      try { await processNote(n, false); } catch (e) { $("#pqStatus").className = "status-line err"; $("#pqStatus").textContent = e.message; return; }
+      renderNotes();
+    };
+  } else box.innerHTML = "";
+
+  $("#noteCount").textContent = S.notes.length ? `${S.notes.length} nota(s)` : "";
+  const list = $("#noteList");
+  if (!S.notes.length) {
+    list.innerHTML = `<div class="empty"><p>Todavía no hay notas. Después de cada clase, escribe lo que te pareció importante: qué componente usaste, qué función nueva viste, qué te costó.</p><p class="small">No tiene que estar bonito. Puedes mezclar español y portugués.</p></div>`;
+    return;
+  }
+  list.innerHTML = [...S.notes].reverse().map(n => {
+    const chips = (n.conceptIds || []).map(id => S.concepts[id]).filter(Boolean).map(c => `<span class="chip">${esc(c.name)}</span>`).join("");
+    const warns = (n.warnings || []).filter(w => !w.dismissed).map((w, i) => `<div class="notice"><div><strong>Posible error en tu nota:</strong> “${esc(w.quote)}”. ${esc(w.why)}</div><div class="small">Tu texto no se ha cambiado. Si quieres corregirlo, añádelo en una nota nueva.</div><div class="row"><button data-dismiss="${n.id}:${i}">Entendido</button></div></div>`).join("");
+    return `<div class="note-item">
+      <div class="row" style="justify-content:space-between"><div class="eyebrow">${fmtDate(n.date)}${n.title ? " · " + esc(n.title) : ""}</div>
+      ${n.processed ? "" : `<button class="ghost" data-reprocess="${n.id}">Organizar de nuevo</button>`}</div>
+      <pre>${esc(n.text)}</pre>
+      ${n.clarification ? `<p class="small">Aclaración: ${esc(n.clarification)}</p>` : ""}
+      ${chips ? `<div class="chips">${chips}</div>` : ""}${warns}</div>`;
+  }).join("");
+  list.querySelectorAll("[data-dismiss]").forEach(b => b.onclick = () => {
+    const [nid, i] = b.dataset.dismiss.split(":"); const n = S.notes.find(x => x.id === nid);
+    const active = n.warnings.filter(w => !w.dismissed); active[+i].dismissed = true; save(); renderNotes();
+  });
+  list.querySelectorAll("[data-reprocess]").forEach(b => b.onclick = async () => {
+    const n = S.notes.find(x => x.id === b.dataset.reprocess); b.disabled = true; b.classList.add("spin");
+    try { await processNote(n, true); } catch (e) { $("#noteStatus").className = "status-line err"; $("#noteStatus").textContent = e.message; }
+    renderNotes();
+  });
+}
+
+/* ============ Mapa ============ */
+function renderMapa() {
+  const cs = Object.values(S.concepts);
+  const g = $("#conceptGrid");
+  if (!cs.length) { g.innerHTML = `<div class="card empty" style="grid-column:1/-1"><p>El mapa se llena solo con tus notas. Escribe la primera en la pestaña <a href="#notas">Notas</a>.</p></div>`; return; }
+  const order = { dominado: 0, practicado: 1, visto: 2 };
+  cs.sort((a, b) => order[conceptStatus(a)] - order[conceptStatus(b)] || a.name.localeCompare(b.name));
+  g.innerHTML = cs.map(c => {
+    const st = conceptStatus(c);
+    const rel = (c.related || []).map(id => S.concepts[id]?.name).filter(Boolean);
+    return `<div class="concept"><div class="name"><i class="led ${st}" title="${STATUS_LABEL[st]}"></i>${esc(c.name)}</div>
+      <p style="font-size:.9rem">${esc(c.summary)}</p>
+      <div class="meta">${STATUS_LABEL[st]} · usado en ${c.practice || 0} reto(s) · ${c.clean || 0}/${DOMINADO_MIN} sin pistas</div>
+      ${rel.length ? `<div class="rel">Se conecta con: ${rel.map(esc).join(", ")}</div>` : ""}</div>`;
+  }).join("");
+}
+
+/* ============ Reto ============ */
+function activeChallenge() { return [...S.challenges].reverse().find(c => c.status === "activo"); }
+
+async function newChallenge() {
+  const prev = S.challenges.slice(-5).map(c => `- ${fmtDate(c.date)} "${c.title}" (${c.status}): ${c.brief}`).join("\n") || "(ninguno: este es el primero)";
+  const prompt = `Crea el siguiente reto práctico para hacer en Tinkercad (Arduino Uno + C++).
+CONCEPTOS DEL ESTUDIANTE (id | nombre | estado | resumen):
+${conceptDigest()}
+
+SUS NOTAS:
+${notesDigest()}
+
+RETOS ANTERIORES (el nuevo debe continuar el mismo proyecto y añadir UN paso nuevo, como un semáforo que va creciendo):
+${prev}
+
+Devuelve:
+{"title":"título corto","project":"nombre del proyecto que va creciendo","brief":"2-3 frases: qué tiene que lograr",
+ "components":["componente y cantidad"],
+ "steps":["qué lograr en cada paso, sin código"],
+ "serialExpected":"líneas EXACTAS que su programa debe imprimir por Serial Monitor, separadas por \\n",
+ "tests":["comprobación observable en la simulación, ej. 'El LED verde se enciende 5 s'"],
+ "hints":["pista 1 suave","pista 2 más concreta","pista 3 casi directa pero sin el código completo"],
+ "conceptIds":["ids usados, solo de la lista"]}
+Reglas:
+- Usa SOLO conceptos de la lista. Si el siguiente paso natural necesita algo que no está en sus notas, elige otro paso que sí pueda hacer con lo que tiene.
+- Prioriza conceptos en estado Visto (aún no practicados) y combínalos con alguno ya practicado.
+- "serialExpected": entre 2 y 6 líneas cortas y deterministas (sin números que dependan del tiempo o de un valor analógico al azar). En "brief" o "steps" dile claramente que su programa debe imprimir exactamente esas líneas con Serial.println en ese orden.
+- Entre 3 y 5 "tests". Las pistas nunca incluyen el programa completo.
+- Solo Tinkercad o baja tensión. Nada de 230 V.`;
+  const r = await gemini(prompt);
+  const ch = {
+    id: uid(), date: today(), title: r.title || "Reto", project: r.project || "", brief: r.brief || "",
+    components: r.components || [], steps: r.steps || [], serialExpected: String(r.serialExpected || "").replace(/\\n/g, "\n"),
+    tests: r.tests || [], hints: r.hints || [], conceptIds: (r.conceptIds || []).map(slug).filter(id => S.concepts[id]),
+    status: "activo", hintsUsed: 0, attempts: 0, failures: 0, lastDiag: null, lesson: null, checks: []
+  };
+  S.challenges.push(ch); save();
+}
+
+const normLines = t => String(t || "").split(/\r?\n/).map(l => l.trim().replace(/\s+/g, " ").toLowerCase()).filter(Boolean);
+function compareSerial(expected, got) {
+  const exp = String(expected || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const gotN = normLines(got);
+  let j = 0;
+  const rows = exp.map(line => {
+    const target = line.replace(/\s+/g, " ").toLowerCase();
+    const idx = gotN.indexOf(target, j);
+    if (idx === -1) return { line, ok: false };
+    j = idx + 1;
+    return { line, ok: true };
+  });
+  return { rows, pass: rows.length > 0 && rows.every(r => r.ok) };
+}
+
+function renderReto() {
+  const box = $("#retoBox");
+  const ch = activeChallenge();
+  const nConcepts = Object.keys(S.concepts).length;
+  if (!ch) {
+    const last = S.challenges[S.challenges.length - 1];
+    const doneToday = last && last.date === today() && last.status === "superado";
+    box.innerHTML = `<div class="card">
+      ${nConcepts ? (doneToday
+        ? `<p class="pass">Reto de hoy superado.</p><p>El siguiente te espera mañana. Si tienes ganas de más, puedes pedir uno extra.</p>`
+        : `<p>Tienes ${nConcepts} concepto(s) en tus notas. El reto usará solo esos.</p>`)
+        : `<p>Para crear un reto, primero necesito al menos una nota con conceptos. Empieza en <a href="#notas">Notas</a>.</p>`}
+      <div class="row"><button class="primary" id="genReto" ${nConcepts ? "" : "disabled"}>${doneToday ? "Quiero un reto extra" : "Crear el reto de hoy"}</button><span class="status-line" id="genStatus"></span></div></div>
+      ${historyHTML()}`;
+    const b = $("#genReto");
+    if (b) b.onclick = async () => {
+      b.disabled = true; b.classList.add("spin"); $("#genStatus").textContent = "Preparando un reto con tus notas…";
+      try { await newChallenge(); renderReto(); }
+      catch (e) { $("#genStatus").className = "status-line err"; $("#genStatus").textContent = e.message; b.disabled = false; b.classList.remove("spin"); }
+    };
+    return;
+  }
+  const concepts = ch.conceptIds.map(id => S.concepts[id]).filter(Boolean);
+  const hintsShown = ch.hints.slice(0, ch.hintsUsed);
+  box.innerHTML = `
+  <div class="card">
+    <div class="eyebrow">${fmtDate(ch.date)}${ch.project ? " · " + esc(ch.project) : ""}</div>
+    <h3 style="font-size:1.3rem">${esc(ch.title)}</h3>
+    <p>${esc(ch.brief)}</p>
+    ${concepts.length ? `<div class="chips">${concepts.map(c => `<span class="chip"><i class="led ${conceptStatus(c)}" style="width:8px;height:8px;margin-right:5px"></i>${esc(c.name)}</span>`).join("")}</div>` : ""}
+    <div><div class="eyebrow">Componentes en Tinkercad</div><ul class="plain">${ch.components.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>
+    <div><div class="eyebrow">Pasos</div><ol class="steps">${ch.steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol></div>
+  </div>
+  <div class="card">
+    <h3>Comprueba en la simulación</h3>
+    <div class="checks">${ch.tests.map((t, i) => `<label><input type="checkbox" data-check="${i}" ${ch.checks[i] ? "checked" : ""}> ${esc(t)}</label>`).join("")}</div>
+  </div>
+  <div class="serial">
+    <div class="bar"><span>Serial Monitor · salida esperada</span><span>9600 baud</span></div>
+    <pre>${esc(ch.serialExpected)}</pre>
+    <label style="color:var(--serial-ink)">Pega aquí lo que muestra tu Serial Monitor<textarea id="serialGot" spellcheck="false" placeholder="Copia el texto del Serial Monitor de Tinkercad y pégalo aquí"></textarea></label>
+    <div class="row"><button class="primary" id="checkBtn">Comprobar</button><span class="small" style="color:var(--serial-ink);opacity:.75">Se compara línea por línea, sin IA.</span></div>
+    <div id="cmpOut"></div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><h3>Pistas</h3><span class="small">${ch.hintsUsed}/${ch.hints.length} usadas</span></div>
+    ${hintsShown.map(h => `<p class="hint">${esc(h)}</p>`).join("") || `<p class="small">Si te atascas, pide una. Usar pistas no resta nada, solo hace que ese reto no cuente para "Dominado".</p>`}
+    ${ch.hintsUsed < ch.hints.length ? `<div class="row"><button id="hintBtn">Ver ${ch.hintsUsed ? "otra pista" : "una pista"}</button></div>` : ""}
+  </div>
+  <div id="failBox"></div>
+  ${ch.lastDiag ? diagHTML(ch) : ""}
+  <div class="row"><button class="ghost" id="skipReto">Dejar este reto y crear otro</button></div>`;
+
+  box.querySelectorAll("[data-check]").forEach(c => c.onchange = () => { ch.checks[+c.dataset.check] = c.checked; save(); });
+  $("#hintBtn") && ($("#hintBtn").onclick = () => { ch.hintsUsed++; save(); renderReto(); });
+  $("#skipReto").onclick = () => {
+    const s = $("#skipReto"); if (s.dataset.armed) { ch.status = "abandonado"; save(); renderReto(); return; }
+    s.dataset.armed = "1"; s.textContent = "Pulsa otra vez para confirmar";
+  };
+  $("#checkBtn").onclick = () => onCheck(ch);
+  bindDiag(ch);
+}
+
+function onCheck(ch) {
+  const got = $("#serialGot").value;
+  const out = $("#cmpOut");
+  if (!got.trim()) { out.innerHTML = `<p class="small" style="color:var(--serial-ink)">Pega primero la salida del Serial Monitor.</p>`; return; }
+  const cmp = compareSerial(ch.serialExpected, got);
+  const checksOk = ch.tests.every((_, i) => ch.checks[i]);
+  ch.attempts++;
+  out.innerHTML = `<div class="cmp">${cmp.rows.map(r => `<div class="${r.ok ? "ok" : "no"}"><span>${esc(r.line)}</span></div>`).join("")}</div>`;
+  if (cmp.pass && checksOk) {
+    ch.status = "superado"; ch.passedAt = new Date().toISOString();
+    const clean = ch.hintsUsed === 0;
+    for (const id of ch.conceptIds) { const c = S.concepts[id]; if (!c) continue; c.practice = (c.practice || 0) + 1; if (clean) c.clean = (c.clean || 0) + 1; }
+    S.errors.filter(e => e.challengeId === ch.id).forEach(e => e.resolved = true);
+    save();
+    renderReto();
+    $("#retoBox").insertAdjacentHTML("afterbegin", `<div class="card"><p class="pass">¡Reto superado!</p><p>${clean ? "Sin pistas: cuenta para Dominado en " : "Contado como práctica de "}${ch.conceptIds.map(id => esc(S.concepts[id]?.name || id)).join(", ")}.</p><p class="small">Mira cómo va tu <a href="#mapa">mapa</a>.</p></div>`);
+    return;
+  }
+  save();
+  const reason = !cmp.pass && !checksOk ? "La salida no coincide y faltan comprobaciones por marcar."
+    : !cmp.pass ? "La salida del Serial Monitor no coincide con la esperada."
+    : "La salida coincide, pero faltan comprobaciones por marcar. Si de verdad ocurren en la simulación, márcalas y comprueba otra vez.";
+  if (cmp.pass) { out.insertAdjacentHTML("beforeend", `<p class="small" style="color:var(--serial-ink);margin-top:8px">${reason}</p>`); return; }
+  showFailForm(ch, got, cmp, reason);
+}
+
+function showFailForm(ch, got, cmp, reason) {
+  $("#failBox").innerHTML = `<div class="card">
+    <h3>Algo no salió todavía</h3><p class="small">${esc(reason)}</p>
+    <label>¿Qué pensaste al hacerlo? (obligatorio)<textarea id="thought" style="min-height:90px" placeholder="Ej.: pensé que con delay() el botão se leía igual mientras el LED estaba encendido"></textarea></label>
+    <label>Tu código (opcional, ayuda al diagnóstico)<textarea id="codeIn" class="mono" spellcheck="false" style="min-height:120px" placeholder="Pega aquí tu código de Tinkercad"></textarea></label>
+    <div class="row"><button class="primary" id="diagBtn">Guardar en el cuaderno y diagnosticar</button><span class="status-line" id="diagStatus"></span></div></div>`;
+  $("#failBox").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("#diagBtn").onclick = async () => {
+    const thought = $("#thought").value.trim();
+    if (!thought) { $("#diagStatus").className = "status-line err"; $("#diagStatus").textContent = "Escribe qué pensaste. Es lo que hace útil el cuaderno."; return; }
+    const code = $("#codeIn").value;
+    const err = { id: uid(), date: today(), challengeId: ch.id, challengeTitle: ch.title, thought, got, missing: cmp.rows.filter(r => !r.ok).map(r => r.line), diag: null, resolved: false };
+    S.errors.push(err); ch.failures++; save();
+    const b = $("#diagBtn"); b.disabled = true; b.classList.add("spin"); $("#diagStatus").className = "status-line"; $("#diagStatus").textContent = "Guardado. Buscando la causa…";
+    try {
+      const d = await diagnose(ch, got, cmp, thought, code);
+      err.diag = d; ch.lastDiag = d; ch.lesson = null; save(); renderReto();
+      $("#diagCard")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) { $("#diagStatus").className = "status-line err"; $("#diagStatus").textContent = `Quedó guardado en el cuaderno, pero el diagnóstico falló: ${e.message}`; b.disabled = false; b.classList.remove("spin"); }
+  };
+}
+
+async function diagnose(ch, got, cmp, thought, code) {
+  const prompt = `Diagnostica por qué falló este reto.
+RETO: ${JSON.stringify({ title: ch.title, brief: ch.brief, steps: ch.steps, tests: ch.tests, serialExpected: ch.serialExpected })}
+SALIDA QUE OBTUVO EN EL SERIAL MONITOR:
+"""${got.slice(0, 3000)}"""
+LÍNEAS ESPERADAS QUE NO APARECEN: ${JSON.stringify(cmp.rows.filter(r => !r.ok).map(r => r.line))}
+LO QUE ÉL PENSÓ: """${thought}"""
+${code.trim() ? `SU CÓDIGO:\n"""${code.slice(0, 8000)}"""` : "(No pegó su código.)"}
+
+CONCEPTOS QUE TIENE EN SUS NOTAS (id | nombre | estado | resumen):
+${conceptDigest()}
+
+Clasifica el fallo:
+- "aplicacion": el concepto que hace falta SÍ está en sus notas, pero lo aplicó mal.
+- "hueco": el reto necesita algo que NO está en sus notas.
+- "formato": el programa probablemente funciona, pero el texto impreso no coincide exactamente (mayúsculas, espacios, orden, falta Serial.begin).
+Devuelve:
+{"type":"aplicacion|hueco|formato","conceptId":"id de la lista si existe, si no \\"\\"","conceptName":"nombre del concepto clave","message":"explicación corta de la causa, sin dar la solución. Para hueco empieza con: Esto falla porque te falta aprender ...","hint":"una pista concreta, nunca el código corregido"}`;
+  const r = await gemini(prompt);
+  return { type: ["aplicacion", "hueco", "formato"].includes(r.type) ? r.type : "aplicacion", conceptId: slug(r.conceptId || ""), conceptName: r.conceptName || "", message: r.message || "", hint: r.hint || "" };
+}
+
+function diagHTML(ch) {
+  const d = ch.lastDiag;
+  const label = { aplicacion: "Error de aplicación", hueco: "Te falta un tema", formato: "Detalle de formato" }[d.type];
+  let body = `<p>${esc(d.message)}</p>${d.hint ? `<p class="hint">${esc(d.hint)}</p>` : ""}`;
+  if (d.type === "aplicacion" && d.conceptName) body += `<p class="small">Esto está en tus notas: repasa lo que escribiste sobre <strong>${esc(d.conceptName)}</strong>.</p>`;
+  if (d.type === "hueco") {
+    if (ch.lesson) {
+      const L = ch.lesson;
+      body += `<div class="card" style="background:var(--panel)"><div class="eyebrow">Mini lección</div><h3>${esc(L.title)}</h3><p style="white-space:pre-wrap">${esc(L.explanation)}</p>
+        ${L.example ? `<pre class="mono" style="white-space:pre-wrap;margin:0;background:var(--bg);padding:10px;border-radius:7px">${esc(L.example)}</pre>` : ""}
+        ${L.miniCheck ? `<p><strong>Para comprobar que lo entendiste:</strong> ${esc(L.miniCheck)}</p>` : ""}
+        <p class="small">Cuando lo tengas claro, escríbelo con tus palabras en una nota. Así entra en tu mapa y el reto ya cuenta con ello.</p>
+        <div class="row"><button class="primary" id="toNote">Escribir mi nota sobre esto</button></div></div>`;
+    } else {
+      body += `<p><strong>¿Quieres que te lo enseñe ahora?</strong></p><div class="row"><button class="primary" id="teachYes">Sí, enséñamelo</button><button id="teachNo">Ahora no</button><span class="status-line" id="teachStatus"></span></div>`;
+    }
+  }
+  return `<div class="diag ${d.type}" id="diagCard"><div class="kind">${label}</div>${body}</div>`;
+}
+function bindDiag(ch) {
+  const y = $("#teachYes"), n = $("#teachNo"), t = $("#toNote");
+  if (n) n.onclick = () => { $("#teachStatus").textContent = "De acuerdo. Puedes buscarlo por tu cuenta o volver aquí cuando quieras."; n.disabled = true; };
+  if (y) y.onclick = async () => {
+    y.disabled = true; y.classList.add("spin");
+    try { ch.lesson = await teach(ch.lastDiag.conceptName || ch.lastDiag.message); save(); renderReto(); $("#diagCard")?.scrollIntoView({ behavior: "smooth" }); }
+    catch (e) { $("#teachStatus").className = "status-line err"; $("#teachStatus").textContent = e.message; y.disabled = false; y.classList.remove("spin"); }
+  };
+  if (t) t.onclick = () => { $("#noteTitle").value = ch.lesson.title || ch.lastDiag.conceptName; $("#noteDate").value = today(); location.hash = "notas"; setTimeout(() => $("#noteText").focus(), 50); };
+}
+async function teach(topic) {
+  const prompt = `El estudiante decidió aprender algo que le falta: "${topic}".
+Sus notas actuales, para partir de lo que ya sabe y usar sus términos:
+${notesDigest(12000)}
+Devuelve:
+{"title":"nombre del tema","explanation":"explicación de 6-10 frases cortas, de cero, conectada con lo que ya anotó","example":"un ejemplo mínimo de código Arduino que muestre la idea en un caso DISTINTO al reto (no la solución del reto)","miniCheck":"una pregunta corta para que compruebe que lo entendió"}`;
+  return await gemini(prompt);
+}
+
+function historyHTML() {
+  const done = S.challenges.filter(c => c.status !== "activo").reverse();
+  if (!done.length) return "";
+  return `<div class="card"><h3>Retos anteriores</h3><div style="display:grid;gap:6px">${done.map(c => `<div class="row" style="justify-content:space-between"><span>${esc(c.title)}</span><span class="small">${fmtDate(c.date)} · ${c.status === "superado" ? (c.hintsUsed ? "superado con pistas" : "superado sin pistas") : "dejado"}</span></div>`).join("")}</div></div>`;
+}
+
+/* ============ Errores ============ */
+function renderErrores() {
+  const el = $("#errList");
+  if (!S.errors.length) { el.innerHTML = `<div class="empty"><p>Sin errores todavía. Cuando un reto no salga, aquí quedará lo que pensaste y por qué falló.</p></div>`; return; }
+  const kind = { aplicacion: "Error de aplicación", hueco: "Te faltaba un tema", formato: "Detalle de formato" };
+  el.innerHTML = [...S.errors].reverse().map(e => `<div class="err-item">
+    <div class="row" style="justify-content:space-between"><div class="eyebrow">${fmtDate(e.date)} · ${esc(e.challengeTitle)}</div><span class="chip">${e.resolved ? "Resuelto" : "Pendiente"}</span></div>
+    <p class="q">“${esc(e.thought)}”</p>
+    ${e.missing?.length ? `<p class="small">No apareció: <span class="mono">${e.missing.map(esc).join(" · ")}</span></p>` : ""}
+    ${e.diag ? `<p><strong>${kind[e.diag.type] || ""}${e.diag.conceptName ? " · " + esc(e.diag.conceptName) : ""}.</strong> ${esc(e.diag.message)}</p>` : `<p class="small">Sin diagnóstico.</p>`}
+  </div>`).join("");
+}
+
+/* ============ Ajustes y respaldo ============ */
+function renderAjustes() {
+  $("#apiKey").value = getKey();
+  fillModelSelect(S.modelList || [], S.modelAuto ? "" : S.model);
+  $("#lastBackup").textContent = S.lastBackup ? `Último respaldo: ${fmtDate(S.lastBackup)}.` : "Todavía no has descargado ningún respaldo.";
+}
+$("#showKey").onclick = () => { const i = $("#apiKey"); const show = i.type === "password"; i.type = show ? "text" : "password"; $("#showKey").textContent = show ? "Ocultar" : "Mostrar"; };
+function fillModelSelect(ids, selected) {
+  const sel = $("#model");
+  sel.innerHTML = `<option value="">Automático (el Flash más reciente)</option>` + ids.map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  sel.value = ids.includes(selected) ? selected : "";
+}
+$("#saveKey").onclick = async () => {
+  setKey($("#apiKey").value.trim());
+  const chosen = $("#model").value;
+  const st = $("#keyStatus"); st.className = "status-line"; st.textContent = "Probando…";
+  try {
+    const ids = await listModels();
+    S.modelList = ids.filter(id => scoreModel(id) >= 0);
+    S.modelAuto = !chosen || !ids.includes(chosen);
+    S.model = S.modelAuto ? await pickModel() : chosen;
+    save(); fillModelSelect(S.modelList, S.modelAuto ? "" : S.model);
+    const r = await gemini('Devuelve {"ok":true}');
+    st.textContent = `Conexión correcta. Usando ${S.model}.`;
+  } catch (e) { st.className = "status-line err"; st.textContent = e.message; }
+};
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(S, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `tinker-notes-respaldo-${today()}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  S.lastBackup = today(); save(); renderBanner(); if (location.hash === "#ajustes") renderAjustes();
+}
+document.querySelectorAll('[data-act="export"]').forEach(b => b.onclick = exportBackup);
+let pendingImport = null;
+$("#importBtn").onclick = () => $("#importFile").click();
+$("#importFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const d = JSON.parse(await f.text()); if (!d || !Array.isArray(d.notes)) throw 0; pendingImport = d; $("#importConfirm").hidden = false; $("#backupStatus").textContent = `Archivo listo: ${d.notes.length} nota(s).`; }
+  catch (x) { $("#backupStatus").className = "status-line err"; $("#backupStatus").textContent = "Ese archivo no es un respaldo de Tinker Notes."; }
+  e.target.value = "";
+};
+$("#importNo").onclick = () => { pendingImport = null; $("#importConfirm").hidden = true; $("#backupStatus").textContent = ""; };
+$("#importYes").onclick = () => { S = Object.assign(blank(), pendingImport); save(); pendingImport = null; $("#importConfirm").hidden = true; $("#backupStatus").className = "status-line"; $("#backupStatus").textContent = "Respaldo restaurado."; renderAjustes(); renderBanner(); };
+
+function renderBanner() {
+  const hasData = S.notes.length > 0;
+  const days = S.lastBackup ? (Date.now() - new Date(S.lastBackup).getTime()) / 864e5 : Infinity;
+  const firstNote = S.notes[0] ? (Date.now() - new Date(S.notes[0].created).getTime()) / 864e5 : 0;
+  $("#backupBanner").hidden = !(hasData && days > 7 && firstNote > 7);
+}
+
+/* ============ Rutas ============ */
+const VIEWS = { notas: renderNotes, mapa: renderMapa, reto: renderReto, errores: renderErrores, ajustes: renderAjustes };
+function route() {
+  let v = location.hash.slice(1);
+  if (!VIEWS[v]) v = getKey() ? "notas" : "ajustes";
+  for (const k of Object.keys(VIEWS)) $("#v-" + k).hidden = k !== v;
+  document.querySelectorAll("#tabs a").forEach(a => { if (a.getAttribute("href") === "#" + v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  VIEWS[v]();
+  renderBanner();
+}
+window.addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>
