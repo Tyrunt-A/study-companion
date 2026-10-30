@@ -2,7 +2,7 @@
 
 A study companion for an Arduino / Tinkercad robotics course, built for one real learner, a friend taking a free vocational course. It turns his own class notes into a concept map and practical Tinkercad challenges.
 
-> **Live demo:** <https://tyrunt-a.github.io/Notes/>
+> **Live demo:** <https://tyrunt-a.github.io/study-companion/>
 
 ## The problem
 
