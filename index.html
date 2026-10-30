@@ -300,8 +300,8 @@ class AIError extends Error { constructor(msg, kind = "otro") { super(msg); this
 
 /* ============ Registro de uso (datos técnicos, nunca contenido) ============ */
 const APP_VERSION = "0.3";
-const TELEMETRY_URL = "";  // URL de la Web App de Google Apps Script (la pones tú al desplegarla)
-const TELEMETRY_KEY = "";  // la misma clave que pusiste en CLAVE dentro del Apps Script
+const TELEMETRY_URL = "https://script.google.com/macros/s/AKfycbzavITvCj-I2IlmJIYgUkF1hrzKh-5kiA0Q6_mTIMb9Glg0YN49Jlg2VQzmtI5qN4YIcQ/exec";  // URL de la Web App de Google Apps Script (la pones tú al desplegarla)
+const TELEMETRY_KEY = "Gengar";  // la misma clave que pusiste en CLAVE dentro del Apps Script
 let aiTag = "otro";
 function setAI(el, tag) { aiStatusEl = el; aiTag = tag; }
 function anonId() {
